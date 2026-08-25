@@ -1,0 +1,850 @@
+/**
+ * NEXUM AI - Creación completa de la base MongoDB.
+ * Modelo v3: 6 colecciones compartidas + 8 por modalidad = 30 colecciones.
+ *
+ * Ejecución:
+ *   mongosh "mongodb://localhost:27017" database/mongodb/nexum_ai_completo.js
+ *
+ * El script NO inserta datos. Es idempotente: crea la colección o actualiza
+ * su validador y después crea/actualiza sus índices.
+ */
+
+db = db.getSiblingDB("nexum_ai");
+
+const S = {
+  str: { bsonType: "string" },
+  bool: { bsonType: "bool" },
+  int: { bsonType: ["int", "long"] },
+  num: { bsonType: ["int", "long", "double", "decimal"] },
+  date: { bsonType: "date" },
+  obj: { bsonType: "object" },
+  arr: { bsonType: "array" },
+  nullableDate: { bsonType: ["date", "null"] },
+  nullableStr: { bsonType: ["string", "null"] },
+};
+
+function schema(required, properties) {
+  return {
+    $jsonSchema: {
+      bsonType: "object",
+      required,
+      properties: {
+        _id: { bsonType: "objectId" },
+        ...properties,
+      },
+      additionalProperties: false,
+    },
+  };
+}
+
+function collection(name, required, properties, indexes) {
+  return { name, validator: schema(required, properties), indexes };
+}
+
+function createOrUpdate(spec) {
+  const exists = db.getCollectionInfos({ name: spec.name }).length > 0;
+  if (!exists) {
+    db.createCollection(spec.name, {
+      validator: spec.validator,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+  } else {
+    db.runCommand({
+      collMod: spec.name,
+      validator: spec.validator,
+      validationLevel: "strict",
+      validationAction: "error",
+    });
+  }
+
+  const target = db.getCollection(spec.name);
+  spec.indexes.forEach(({ key, options = {} }) =>
+    target.createIndex(key, options),
+  );
+}
+
+const commonSample = {
+  codigoMuestra: S.str,
+  codigoSesion: S.str,
+  codigoGesto: S.str,
+  fechaCaptura: S.date,
+  datosVision: S.obj,
+  datosInercia: S.obj,
+  confianzaVision: { ...S.num, minimum: 0, maximum: 1 },
+  confianzaInercia: { ...S.num, minimum: 0, maximum: 1 },
+  confianzaFusion: { ...S.num, minimum: 0, maximum: 1 },
+  etiquetaValidada: S.bool,
+};
+
+const commonTelemetry = {
+  codigoTelemetria: S.str,
+  codigoSesion: S.str,
+  tipoTelemetria: S.str,
+  fechaEvento: S.date,
+  fechaExpiracion: S.date,
+  latenciaMs: { ...S.num, minimum: 0 },
+  payload: S.obj,
+};
+
+const collections = [
+  // -------------------------------------------------------------------------
+  // NÚCLEO COMPARTIDO (6)
+  // -------------------------------------------------------------------------
+  collection(
+    "catalogo_gestos",
+    ["codigoGesto", "nombreGesto", "tipoGesto", "activo", "fechaRegistro"],
+    {
+      codigoGesto: S.str,
+      nombreGesto: S.str,
+      tipoGesto: { ...S.str, enum: ["estatico", "dinamico"] },
+      categoriaGesto: {
+        ...S.str,
+        enum: ["manipulacion", "combate", "navegacion", "escritura"],
+      },
+      descripcionGesto: S.str,
+      dedosInvolucrados: S.arr,
+      requiereVision: S.bool,
+      requiereInercia: S.bool,
+      requiereFusion: S.bool,
+      duracionMinimaMs: { ...S.int, minimum: 0 },
+      duracionMaximaMs: { ...S.int, minimum: 0 },
+      umbralConfianza: { ...S.num, minimum: 0, maximum: 1 },
+      ventanaTemporalMs: { ...S.int, minimum: 0 },
+      secuenciaMovimiento: S.arr,
+      gestosRelacionados: S.arr,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoGesto: 1 }, options: { unique: true } },
+      { key: { tipoGesto: 1, activo: 1 } },
+      { key: { categoriaGesto: 1 } },
+    ],
+  ),
+  collection(
+    "modalidades_aplicacion",
+    [
+      "codigoModalidad",
+      "nombreModalidad",
+      "motorDestino",
+      "estadoModalidad",
+      "fechaRegistro",
+    ],
+    {
+      codigoModalidad: {
+        ...S.str,
+        enum: [
+          "arquitecto_tridimensional",
+          "control_videojuego",
+          "interaccion_hibrida",
+        ],
+      },
+      nombreModalidad: S.str,
+      descripcionModalidad: S.str,
+      motorDestino: { ...S.str, enum: ["threejs", "unity", "navegador"] },
+      categoriasComando: S.arr,
+      gestosPermitidos: S.arr,
+      coleccionComandos: S.str,
+      coleccionSesiones: S.str,
+      permiteDosManos: S.bool,
+      tiempoDebounceMs: { ...S.int, minimum: 0 },
+      sensibilidadMovimiento: { ...S.num, minimum: 0 },
+      estadoModalidad: {
+        ...S.str,
+        enum: ["activa", "inactiva", "mantenimiento"],
+      },
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoModalidad: 1 }, options: { unique: true } },
+      { key: { motorDestino: 1 } },
+      { key: { estadoModalidad: 1 } },
+    ],
+  ),
+  collection(
+    "configuracion_guante",
+    ["codigoGuante", "codigoEsp32", "cantidadSensores", "fechaRegistro"],
+    {
+      codigoGuante: S.str,
+      codigoEsp32: S.str,
+      codigoMultiplexor: S.str,
+      cantidadSensores: { ...S.int, minimum: 1 },
+      mapaSensores: S.obj,
+      posicionNeutral: S.obj,
+      rangosMovimiento: S.obj,
+      frecuenciaMuestreoHz: { ...S.int, minimum: 1 },
+      tipoFiltro: S.str,
+      protocoloComunicacion: S.str,
+      puertoComunicacion: { ...S.int, minimum: 1, maximum: 65535 },
+      versionFirmware: S.str,
+      calibracionEstable: S.bool,
+      puntajeCalidad: { ...S.num, minimum: 0, maximum: 1 },
+      calibracionActiva: S.bool,
+      fechaCalibracion: S.date,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoGuante: 1 }, options: { unique: true } },
+      { key: { calibracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "configuracion_vision",
+    ["codigoCamara", "modeloDeteccion", "configuracionActiva", "fechaRegistro"],
+    {
+      codigoCamara: S.str,
+      resolucionCaptura: S.str,
+      frecuenciaCapturaFps: { ...S.int, minimum: 1 },
+      modeloDeteccion: S.str,
+      cantidadManosMaxima: { ...S.int, minimum: 1, maximum: 2 },
+      confianzaDeteccion: { ...S.num, minimum: 0, maximum: 1 },
+      confianzaSeguimiento: { ...S.num, minimum: 0, maximum: 1 },
+      espejoHorizontal: S.bool,
+      normalizarCoordenadas: S.bool,
+      configuracionActiva: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoCamara: 1 }, options: { unique: true } },
+      { key: { configuracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "configuracion_sistema",
+    [
+      "codigoConfiguracion",
+      "modalidadActiva",
+      "configuracionActiva",
+      "fechaActualizacion",
+    ],
+    {
+      codigoConfiguracion: S.str,
+      modalidadActiva: S.str,
+      desfaseVisionImuMs: S.int,
+      tamanoVentanaMs: { ...S.int, minimum: 1 },
+      tamanoBuffer: { ...S.int, minimum: 1 },
+      confianzaMinimaGlobal: { ...S.num, minimum: 0, maximum: 1 },
+      tiempoDebounceGlobalMs: { ...S.int, minimum: 0 },
+      frecuenciaActualizacionHudMs: { ...S.int, minimum: 1 },
+      mostrarTelemetria: S.bool,
+      mostrarConfianza: S.bool,
+      mostrarHistorial: S.bool,
+      ttlTelemetriaDias: { ...S.int, minimum: 1 },
+      rutaArchivos: S.str,
+      configuracionActiva: S.bool,
+      fechaActualizacion: S.date,
+    },
+    [
+      { key: { codigoConfiguracion: 1 }, options: { unique: true } },
+      { key: { modalidadActiva: 1 } },
+      { key: { configuracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "modelos_entrenados",
+    [
+      "codigoModelo",
+      "codigoModalidad",
+      "tipoModelo",
+      "estadoModelo",
+      "fechaRegistro",
+    ],
+    {
+      codigoModelo: S.str,
+      codigoModalidad: S.str,
+      nombreModelo: S.str,
+      tipoModelo: { ...S.str, enum: ["clasificador", "lstm", "gru"] },
+      versionModelo: S.str,
+      precisionModelo: { ...S.num, minimum: 0, maximum: 1 },
+      gestosEntrenados: S.arr,
+      estadoModelo: {
+        ...S.str,
+        enum: ["entrenando", "listo", "archivado"],
+      },
+      modeloActivo: S.bool,
+      rutaArchivo: S.str,
+      fechaEntrenamiento: S.date,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoModelo: 1 }, options: { unique: true } },
+      { key: { codigoModalidad: 1, tipoModelo: 1 } },
+      { key: { codigoModalidad: 1, modeloActivo: 1 } },
+      { key: { estadoModelo: 1 } },
+    ],
+  ),
+
+  // -------------------------------------------------------------------------
+  // MODALIDAD 1: ARQUITECTO TRIDIMENSIONAL / THREE.JS (8)
+  // -------------------------------------------------------------------------
+  collection(
+    "arquitecto_comandos",
+    ["codigoComando", "nombreComando", "tipoComando", "activo", "fechaRegistro"],
+    {
+      codigoComando: S.str,
+      nombreComando: S.str,
+      categoriaComando: {
+        ...S.str,
+        enum: ["manipulacion", "navegacion"],
+      },
+      descripcionComando: S.str,
+      tipoComando: {
+        ...S.str,
+        enum: ["accion", "transformacion", "navegacion"],
+      },
+      gestosSugeridos: S.arr,
+      requiereObjetivoSeleccionado: S.bool,
+      ejesPermitidos: S.arr,
+      parametrosComando: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoComando: 1 }, options: { unique: true } },
+      { key: { categoriaComando: 1, activo: 1 } },
+      { key: { tipoComando: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_reglas_semanticas",
+    [
+      "codigoRegla",
+      "codigoGesto",
+      "codigoComando",
+      "prioridadRegla",
+      "activo",
+    ],
+    {
+      codigoRegla: S.str,
+      codigoGesto: S.str,
+      codigoComando: S.str,
+      prioridadRegla: { ...S.int, minimum: 0 },
+      confianzaMinima: { ...S.num, minimum: 0, maximum: 1 },
+      estadoAplicacion: {
+        ...S.str,
+        enum: ["edicion", "navegacion", "vista_previa"],
+      },
+      ejeTransformacion: { ...S.str, enum: ["x", "y", "z", "libre"] },
+      parametrosEjecucion: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoRegla: 1 }, options: { unique: true } },
+      { key: { codigoGesto: 1, codigoComando: 1 } },
+      { key: { prioridadRegla: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_configuracion",
+    ["codigoConfiguracion", "motorDestino", "configuracionActiva", "fechaRegistro"],
+    {
+      codigoConfiguracion: S.str,
+      motorDestino: { ...S.str, enum: ["threejs"] },
+      gridVisible: S.bool,
+      unidadMedida: S.str,
+      modoCamara: {
+        ...S.str,
+        enum: ["orbita", "primera_persona", "ortografica"],
+      },
+      snapActivado: S.bool,
+      sensibilidadRotacion: { ...S.num, minimum: 0 },
+      sensibilidadZoom: { ...S.num, minimum: 0 },
+      permiteDosManos: S.bool,
+      tiempoDebounceMs: { ...S.int, minimum: 0 },
+      configuracionActiva: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoConfiguracion: 1 }, options: { unique: true } },
+      { key: { configuracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_sesiones",
+    [
+      "codigoSesion",
+      "codigoGuante",
+      "codigoCamara",
+      "codigoConfiguracion",
+      "fechaInicio",
+      "estadoSesion",
+    ],
+    {
+      codigoSesion: S.str,
+      codigoGuante: S.str,
+      codigoCamara: S.str,
+      codigoConfiguracion: S.str,
+      codigoModeloClasificador: S.nullableStr,
+      fechaInicio: S.date,
+      fechaFin: S.nullableDate,
+      estadoSesion: { ...S.str, enum: ["activa", "finalizada", "error"] },
+      objetosSeleccionados: S.arr,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoSesion: 1 }, options: { unique: true } },
+      { key: { codigoGuante: 1, fechaInicio: -1 } },
+      { key: { codigoCamara: 1, fechaInicio: -1 } },
+      { key: { estadoSesion: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_muestras",
+    ["codigoMuestra", "codigoSesion", "codigoGesto", "fechaCaptura"],
+    commonSample,
+    [
+      { key: { codigoMuestra: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, codigoGesto: 1 } },
+      { key: { fechaCaptura: -1 } },
+      { key: { etiquetaValidada: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_historial_comandos",
+    [
+      "codigoHistorial",
+      "codigoSesion",
+      "codigoGestoDetectado",
+      "codigoComando",
+      "fechaEjecucion",
+    ],
+    {
+      codigoHistorial: S.str,
+      codigoSesion: S.str,
+      codigoGestoDetectado: S.str,
+      codigoComando: S.str,
+      fechaEjecucion: S.date,
+      confianzaDeteccion: { ...S.num, minimum: 0, maximum: 1 },
+      codigoObjetivoAfectado: S.str,
+      parametrosEjecutados: S.obj,
+      resultadoEjecucion: S.str,
+    },
+    [
+      { key: { codigoHistorial: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, fechaEjecucion: -1 } },
+      { key: { codigoComando: 1 } },
+      { key: { codigoGestoDetectado: 1 } },
+    ],
+  ),
+  collection(
+    "arquitecto_telemetria",
+    ["codigoTelemetria", "codigoSesion", "tipoTelemetria", "fechaEvento"],
+    {
+      ...commonTelemetry,
+      tipoTelemetria: {
+        ...S.str,
+        enum: ["vision", "inercia", "fusion", "render"],
+      },
+    },
+    [
+      { key: { codigoTelemetria: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, tipoTelemetria: 1 } },
+      { key: { fechaEvento: -1 } },
+      {
+        key: { fechaExpiracion: 1 },
+        options: { expireAfterSeconds: 0 },
+      },
+    ],
+  ),
+  collection(
+    "arquitecto_escenas",
+    ["codigoEscena", "codigoSesion", "nombreEscena", "estadoEscena"],
+    {
+      codigoEscena: S.str,
+      codigoSesion: S.str,
+      nombreEscena: S.str,
+      objetosEscena: S.arr,
+      camaraActiva: S.obj,
+      estadoEscena: { ...S.str, enum: ["borrador", "activa", "archivada"] },
+      fechaActualizacion: S.date,
+    },
+    [
+      { key: { codigoEscena: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1 } },
+      { key: { estadoEscena: 1 } },
+    ],
+  ),
+
+  // -------------------------------------------------------------------------
+  // MODALIDAD 2: CONTROL DE VIDEOJUEGO / UNITY (8)
+  // -------------------------------------------------------------------------
+  collection(
+    "videojuego_comandos",
+    ["codigoComando", "nombreComando", "tipoAccion", "activo", "fechaRegistro"],
+    {
+      codigoComando: S.str,
+      nombreComando: S.str,
+      categoriaComando: { ...S.str, enum: ["combate", "navegacion"] },
+      descripcionComando: S.str,
+      tipoAccion: {
+        ...S.str,
+        enum: ["accion", "ataque", "defensa", "movimiento", "habilidad"],
+      },
+      gestosSugeridos: S.arr,
+      magnitudDefault: { ...S.num, minimum: 0 },
+      cooldownMs: { ...S.int, minimum: 0 },
+      slotHabilidad: { ...S.int, minimum: 0 },
+      parametrosComando: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoComando: 1 }, options: { unique: true } },
+      { key: { categoriaComando: 1, activo: 1 } },
+      { key: { tipoAccion: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_reglas_semanticas",
+    [
+      "codigoRegla",
+      "codigoGesto",
+      "codigoComando",
+      "prioridadRegla",
+      "activo",
+    ],
+    {
+      codigoRegla: S.str,
+      codigoGesto: S.str,
+      codigoComando: S.str,
+      prioridadRegla: { ...S.int, minimum: 0 },
+      confianzaMinima: { ...S.num, minimum: 0, maximum: 1 },
+      estadoAplicacion: { ...S.str, enum: ["juego", "menu", "pausa"] },
+      ventanaComboMs: { ...S.int, minimum: 0 },
+      parametrosEjecucion: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoRegla: 1 }, options: { unique: true } },
+      { key: { codigoGesto: 1, codigoComando: 1 } },
+      { key: { prioridadRegla: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_configuracion",
+    ["codigoConfiguracion", "motorDestino", "configuracionActiva", "fechaRegistro"],
+    {
+      codigoConfiguracion: S.str,
+      motorDestino: { ...S.str, enum: ["unity"] },
+      sensibilidadMovimiento: { ...S.num, minimum: 0 },
+      ventanaComboMs: { ...S.int, minimum: 0 },
+      magnitudAtaqueDefault: { ...S.num, minimum: 0 },
+      mapeoBotones: S.obj,
+      permiteDosManos: S.bool,
+      tiempoDebounceMs: { ...S.int, minimum: 0 },
+      configuracionActiva: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoConfiguracion: 1 }, options: { unique: true } },
+      { key: { configuracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_sesiones",
+    [
+      "codigoSesion",
+      "codigoGuante",
+      "codigoCamara",
+      "codigoConfiguracion",
+      "fechaInicio",
+      "estadoSesion",
+    ],
+    {
+      codigoSesion: S.str,
+      codigoGuante: S.str,
+      codigoCamara: S.str,
+      codigoConfiguracion: S.str,
+      codigoModeloClasificador: S.nullableStr,
+      codigoPerfil: S.nullableStr,
+      nombrePartida: S.str,
+      fechaInicio: S.date,
+      fechaFin: S.nullableDate,
+      estadoSesion: { ...S.str, enum: ["activa", "finalizada", "error"] },
+      puntuacionSesion: { ...S.int, minimum: 0 },
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoSesion: 1 }, options: { unique: true } },
+      { key: { codigoGuante: 1, fechaInicio: -1 } },
+      { key: { codigoCamara: 1, fechaInicio: -1 } },
+      { key: { estadoSesion: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_muestras",
+    ["codigoMuestra", "codigoSesion", "codigoGesto", "fechaCaptura"],
+    commonSample,
+    [
+      { key: { codigoMuestra: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, codigoGesto: 1 } },
+      { key: { fechaCaptura: -1 } },
+      { key: { etiquetaValidada: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_historial_comandos",
+    [
+      "codigoHistorial",
+      "codigoSesion",
+      "codigoGestoDetectado",
+      "codigoComando",
+      "fechaEjecucion",
+    ],
+    {
+      codigoHistorial: S.str,
+      codigoSesion: S.str,
+      codigoGestoDetectado: S.str,
+      codigoComando: S.str,
+      fechaEjecucion: S.date,
+      confianzaDeteccion: { ...S.num, minimum: 0, maximum: 1 },
+      magnitudEjecutada: { ...S.num, minimum: 0 },
+      esCombo: S.bool,
+      parametrosEjecutados: S.obj,
+      resultadoEjecucion: S.str,
+    },
+    [
+      { key: { codigoHistorial: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, fechaEjecucion: -1 } },
+      { key: { codigoComando: 1 } },
+      { key: { codigoGestoDetectado: 1 } },
+    ],
+  ),
+  collection(
+    "videojuego_telemetria",
+    ["codigoTelemetria", "codigoSesion", "tipoTelemetria", "fechaEvento"],
+    {
+      ...commonTelemetry,
+      tipoTelemetria: {
+        ...S.str,
+        enum: ["vision", "inercia", "fusion", "input_lag"],
+      },
+    },
+    [
+      { key: { codigoTelemetria: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, tipoTelemetria: 1 } },
+      { key: { fechaEvento: -1 } },
+      {
+        key: { fechaExpiracion: 1 },
+        options: { expireAfterSeconds: 0 },
+      },
+    ],
+  ),
+  collection(
+    "videojuego_perfil_jugador",
+    ["codigoPerfil", "codigoSesion", "nombreJugador", "fechaRegistro"],
+    {
+      codigoPerfil: S.str,
+      codigoSesion: S.str,
+      nombreJugador: S.str,
+      nivelExperiencia: S.str,
+      combosRegistrados: S.arr,
+      estadisticasCombate: S.obj,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoPerfil: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1 } },
+      { key: { nombreJugador: 1 } },
+    ],
+  ),
+
+  // -------------------------------------------------------------------------
+  // MODALIDAD 3: INTERACCIÓN HÍBRIDA / NAVEGADOR (8)
+  // -------------------------------------------------------------------------
+  collection(
+    "hibrida_comandos",
+    ["codigoComando", "nombreComando", "tipoEntrada", "activo", "fechaRegistro"],
+    {
+      codigoComando: S.str,
+      nombreComando: S.str,
+      categoriaComando: { ...S.str, enum: ["navegacion", "escritura"] },
+      descripcionComando: S.str,
+      tipoEntrada: {
+        ...S.str,
+        enum: ["tecla", "desplazamiento", "confirmacion", "cancelacion"],
+      },
+      gestosSugeridos: S.arr,
+      teclaEquivalente: S.str,
+      modoDesplazamiento: {
+        ...S.str,
+        enum: ["horizontal", "vertical", "libre"],
+      },
+      parametrosComando: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoComando: 1 }, options: { unique: true } },
+      { key: { categoriaComando: 1, activo: 1 } },
+      { key: { tipoEntrada: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_reglas_semanticas",
+    [
+      "codigoRegla",
+      "codigoGesto",
+      "codigoComando",
+      "prioridadRegla",
+      "activo",
+    ],
+    {
+      codigoRegla: S.str,
+      codigoGesto: S.str,
+      codigoComando: S.str,
+      prioridadRegla: { ...S.int, minimum: 0 },
+      confianzaMinima: { ...S.num, minimum: 0, maximum: 1 },
+      estadoAplicacion: {
+        ...S.str,
+        enum: ["navegacion", "escritura", "formulario"],
+      },
+      teclaEquivalente: S.str,
+      parametrosEjecucion: S.obj,
+      activo: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoRegla: 1 }, options: { unique: true } },
+      { key: { codigoGesto: 1, codigoComando: 1 } },
+      { key: { prioridadRegla: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_configuracion",
+    ["codigoConfiguracion", "motorDestino", "configuracionActiva", "fechaRegistro"],
+    {
+      codigoConfiguracion: S.str,
+      motorDestino: { ...S.str, enum: ["navegador"] },
+      layoutTeclado: { ...S.str, enum: ["qwerty", "numerico", "personalizado"] },
+      velocidadDesplazamiento: { ...S.num, minimum: 0 },
+      sensibilidadScroll: { ...S.num, minimum: 0 },
+      teclaConfirmacion: S.str,
+      teclaCancelacion: S.str,
+      permiteDosManos: S.bool,
+      tiempoDebounceMs: { ...S.int, minimum: 0 },
+      configuracionActiva: S.bool,
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoConfiguracion: 1 }, options: { unique: true } },
+      { key: { configuracionActiva: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_sesiones",
+    [
+      "codigoSesion",
+      "codigoGuante",
+      "codigoCamara",
+      "codigoConfiguracion",
+      "fechaInicio",
+      "estadoSesion",
+    ],
+    {
+      codigoSesion: S.str,
+      codigoGuante: S.str,
+      codigoCamara: S.str,
+      codigoConfiguracion: S.str,
+      codigoModeloClasificador: S.nullableStr,
+      codigoTeclado: S.nullableStr,
+      urlAplicacion: S.str,
+      fechaInicio: S.date,
+      fechaFin: S.nullableDate,
+      estadoSesion: { ...S.str, enum: ["activa", "finalizada", "error"] },
+      fechaRegistro: S.date,
+    },
+    [
+      { key: { codigoSesion: 1 }, options: { unique: true } },
+      { key: { codigoGuante: 1, fechaInicio: -1 } },
+      { key: { codigoCamara: 1, fechaInicio: -1 } },
+      { key: { estadoSesion: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_muestras",
+    ["codigoMuestra", "codigoSesion", "codigoGesto", "fechaCaptura"],
+    commonSample,
+    [
+      { key: { codigoMuestra: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, codigoGesto: 1 } },
+      { key: { fechaCaptura: -1 } },
+      { key: { etiquetaValidada: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_historial_comandos",
+    [
+      "codigoHistorial",
+      "codigoSesion",
+      "codigoGestoDetectado",
+      "codigoComando",
+      "fechaEjecucion",
+    ],
+    {
+      codigoHistorial: S.str,
+      codigoSesion: S.str,
+      codigoGestoDetectado: S.str,
+      codigoComando: S.str,
+      fechaEjecucion: S.date,
+      confianzaDeteccion: { ...S.num, minimum: 0, maximum: 1 },
+      teclaEjecutada: S.str,
+      caracterIngresado: S.str,
+      parametrosEjecutados: S.obj,
+      resultadoEjecucion: S.str,
+    },
+    [
+      { key: { codigoHistorial: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, fechaEjecucion: -1 } },
+      { key: { codigoComando: 1 } },
+      { key: { codigoGestoDetectado: 1 } },
+    ],
+  ),
+  collection(
+    "hibrida_telemetria",
+    ["codigoTelemetria", "codigoSesion", "tipoTelemetria", "fechaEvento"],
+    {
+      ...commonTelemetry,
+      tipoTelemetria: {
+        ...S.str,
+        enum: ["vision", "inercia", "fusion", "dom_event"],
+      },
+    },
+    [
+      { key: { codigoTelemetria: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1, tipoTelemetria: 1 } },
+      { key: { fechaEvento: -1 } },
+      {
+        key: { fechaExpiracion: 1 },
+        options: { expireAfterSeconds: 0 },
+      },
+    ],
+  ),
+  collection(
+    "hibrida_teclado_virtual",
+    ["codigoTeclado", "codigoSesion", "layoutTeclado", "fechaActualizacion"],
+    {
+      codigoTeclado: S.str,
+      codigoSesion: S.str,
+      layoutTeclado: S.str,
+      filasTeclado: S.arr,
+      teclaActiva: S.str,
+      posicionCursor: S.obj,
+      fechaActualizacion: S.date,
+    },
+    [
+      { key: { codigoTeclado: 1 }, options: { unique: true } },
+      { key: { codigoSesion: 1 } },
+      { key: { layoutTeclado: 1 } },
+    ],
+  ),
+];
+
+collections.forEach(createOrUpdate);
+
+print(
+  `NEXUM AI creada/actualizada: ${collections.length} colecciones, sin datos.`,
+);

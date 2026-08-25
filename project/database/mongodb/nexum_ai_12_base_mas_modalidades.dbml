@@ -1,0 +1,254 @@
+// =============================================================================
+// NEXUM AI - Copiar y pegar en: https://dbdiagram.io
+//
+// FILA 1  USUARIO | modalidades_aplicacion
+// FILA 2  catalogo_gestos | reglas_comando_semantico | catalogo_comandos
+// FILA 3  configuracion_guante | configuracion_sistema | configuracion_vision
+// FILA 4  sesiones_captura
+// FILA 5  muestras_multimodales | historial_comandos | registros_telemetria | modelos_entrenados
+//
+// USUARIO se enlaza SOLO con modalidades_aplicacion (codigoUsuario puede ser null).
+// =============================================================================
+
+Project nexum_ai {
+  database_type: 'PostgreSQL / MongoDB conceptual'
+  Note: 'Núcleo ordenado por filas. USUARIO es opcional y solo se relaciona con modalidades_aplicacion.'
+}
+
+TableGroup "FILA 1 - Actor y cabeza" [color: #0F766E] {
+  USUARIO
+  modalidades_aplicacion
+}
+
+TableGroup "FILA 2 - Catalogos y reglas" [color: #1E3A5F] {
+  catalogo_gestos
+  reglas_comando_semantico
+  catalogo_comandos
+}
+
+TableGroup "FILA 3 - Hardware y sistema" [color: #334155] {
+  configuracion_guante
+  configuracion_sistema
+  configuracion_vision
+}
+
+TableGroup "FILA 4 - Operacion" [color: #2563EB] {
+  sesiones_captura
+}
+
+TableGroup "FILA 5 - Datos y ML" [color: #475569] {
+  muestras_multimodales
+  historial_comandos
+  registros_telemetria
+  modelos_entrenados
+}
+
+// -----------------------------------------------------------------------------
+// FILA 1
+// -----------------------------------------------------------------------------
+
+Table USUARIO {
+  codigoUsuario varchar [pk]
+  nombreUsuario varchar
+  correoUsuario varchar
+  tipoUsuario varchar [note: 'registrado | invitado | sistema']
+  estadoUsuario varchar [note: 'activo | inactivo']
+  fechaRegistro datetime
+
+  Note: 'FILA 1. Opcional. null en modalidades_aplicacion = uso sin usuario.'
+}
+
+Table modalidades_aplicacion {
+  codigoModalidad varchar [pk]
+  codigoUsuario varchar [ref: > USUARIO.codigoUsuario, note: 'OPCIONAL: null = sin usuario']
+  nombreModalidad varchar
+  descripcionModalidad varchar
+  categoriasComando json
+  motorDestino varchar
+  gestosPermitidos json
+  permiteDosManos boolean
+  tiempoDebounceMs integer
+  sensibilidadMovimiento real
+  estadoModalidad varchar
+  fechaRegistro datetime
+
+  Note: 'FILA 1. Única tabla del núcleo que apunta a USUARIO.'
+}
+
+// -----------------------------------------------------------------------------
+// FILA 2
+// -----------------------------------------------------------------------------
+
+Table catalogo_gestos {
+  codigoGesto varchar [pk]
+  nombreGesto varchar
+  tipoGesto varchar
+  categoriaGesto varchar
+  descripcionGesto varchar
+  dedosInvolucrados json
+  requiereVision boolean
+  requiereInercia boolean
+  requiereFusion boolean
+  duracionMinimaMs integer
+  duracionMaximaMs integer
+  umbralConfianza real
+  ventanaTemporalMs integer
+  secuenciaMovimiento json
+  gestosRelacionados json
+  activo boolean
+  fechaRegistro datetime
+}
+
+Table reglas_comando_semantico {
+  codigoRegla varchar [pk]
+  codigoGesto varchar [ref: > catalogo_gestos.codigoGesto]
+  codigoModalidad varchar [ref: > modalidades_aplicacion.codigoModalidad]
+  codigoComando varchar [ref: > catalogo_comandos.codigoComando]
+  prioridadRegla integer
+  confianzaMinima real
+  estadoAplicacion varchar
+  parametrosEjecucion json
+  activo boolean
+  fechaRegistro datetime
+}
+
+Table catalogo_comandos {
+  codigoComando varchar [pk]
+  nombreComando varchar
+  categoriaComando varchar
+  descripcionComando varchar
+  tipoComando varchar
+  modalidadesCompatibles json
+  parametrosComando json
+  requiereObjetivoSeleccionado boolean
+  gestosSugeridos json
+  activo boolean
+  fechaRegistro datetime
+}
+
+// -----------------------------------------------------------------------------
+// FILA 3
+// -----------------------------------------------------------------------------
+
+Table configuracion_guante {
+  codigoGuante varchar [pk]
+  codigoEsp32 varchar
+  codigoMultiplexor varchar
+  cantidadSensores integer
+  mapaSensores json
+  posicionNeutral json
+  rangosMovimiento json
+  frecuenciaMuestreoHz integer
+  tipoFiltro varchar
+  protocoloComunicacion varchar
+  puertoComunicacion integer
+  versionFirmware varchar
+  calibracionEstable boolean
+  puntajeCalidad real
+  calibracionActiva boolean
+  fechaCalibracion datetime
+  fechaRegistro datetime
+}
+
+Table configuracion_sistema {
+  codigoConfiguracion varchar [pk]
+  modalidadActiva varchar [ref: > modalidades_aplicacion.codigoModalidad]
+  desfaseVisionImuMs integer
+  tamanoVentanaMs integer
+  tamanoBuffer integer
+  confianzaMinima real
+  tiempoDebounceMs integer
+  modeloEstaticoActivo varchar [ref: > modelos_entrenados.codigoModelo]
+  modeloDinamicoActivo varchar [ref: > modelos_entrenados.codigoModelo]
+  frecuenciaActualizacionHudMs integer
+  mostrarTelemetria boolean
+  mostrarConfianza boolean
+  mostrarHistorial boolean
+  ttlTelemetriaDias integer
+  rutaArchivos varchar
+  configuracionActiva boolean
+  fechaActualizacion datetime
+}
+
+Table configuracion_vision {
+  codigoCamara varchar [pk]
+  resolucionCaptura varchar
+  frecuenciaCapturaFps integer
+  modeloDeteccion varchar
+  cantidadManosMaxima integer
+  confianzaDeteccion real
+  confianzaSeguimiento real
+  espejoHorizontal boolean
+  normalizarCoordenadas boolean
+  configuracionActiva boolean
+  fechaRegistro datetime
+}
+
+// -----------------------------------------------------------------------------
+// FILA 4
+// -----------------------------------------------------------------------------
+
+Table sesiones_captura {
+  codigoSesion varchar [pk]
+  codigoModalidad varchar [ref: > modalidades_aplicacion.codigoModalidad]
+  codigoGuante varchar [ref: > configuracion_guante.codigoGuante]
+  codigoCamara varchar [ref: > configuracion_vision.codigoCamara]
+  fechaInicio datetime
+  fechaFin datetime
+  estadoSesion varchar
+  fechaRegistro datetime
+
+  Note: 'FILA 4. Hub operativo: une modalidad, guante y cámara.'
+}
+
+// -----------------------------------------------------------------------------
+// FILA 5
+// -----------------------------------------------------------------------------
+
+Table muestras_multimodales {
+  codigoMuestra varchar [pk]
+  idSesion varchar [ref: > sesiones_captura.codigoSesion]
+  codigoGesto varchar [ref: > catalogo_gestos.codigoGesto]
+  codigoModalidad varchar [ref: > modalidades_aplicacion.codigoModalidad]
+  fechaCaptura datetime
+  datosVision json
+  datosInercia json
+  confianzaVision real
+  confianzaInercia real
+  confianzaFusion real
+  etiquetaValidada boolean
+}
+
+Table historial_comandos {
+  codigoHistorial varchar [pk]
+  idSesion varchar [ref: > sesiones_captura.codigoSesion]
+  codigoGestoDetectado varchar [ref: > catalogo_gestos.codigoGesto]
+  codigoModalidad varchar [ref: > modalidades_aplicacion.codigoModalidad]
+  codigoComando varchar [ref: > catalogo_comandos.codigoComando]
+  fechaEjecucion datetime
+  confianzaDeteccion real
+  parametrosEjecutados json
+  resultadoEjecucion varchar
+}
+
+Table registros_telemetria {
+  codigoTelemetria varchar [pk]
+  idSesion varchar [ref: > sesiones_captura.codigoSesion]
+  tipoTelemetria varchar
+  fechaEvento datetime
+  fechaExpiracion datetime
+  payload json
+}
+
+Table modelos_entrenados {
+  codigoModelo varchar [pk]
+  nombreModelo varchar
+  tipoModelo varchar
+  versionModelo varchar
+  precisionModelo real
+  estadoModelo varchar
+  modeloActivo boolean
+  rutaArchivo varchar
+  fechaEntrenamiento datetime
+  fechaRegistro datetime
+}

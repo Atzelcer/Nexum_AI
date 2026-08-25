@@ -1,0 +1,4 @@
+# El venv unico esta en la raiz: NEXUM_AI/.venv
+__pycache__/
+*.pyc
+data/*.csv

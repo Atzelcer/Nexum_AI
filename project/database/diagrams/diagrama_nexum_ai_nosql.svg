@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1800" viewBox="0 0 2400 1800">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title{font:700 40px Arial,sans-serif;fill:#0f172a}
+      .subtitle{font:20px Arial,sans-serif;fill:#475569}
+      .groupTitle{font:700 22px Arial,sans-serif;fill:#fff}
+      .nodeTitle{font:700 17px Arial,sans-serif;fill:#0f172a}
+      .field{font:14px Consolas,monospace;fill:#334155}
+      .legend{font:15px Arial,sans-serif;fill:#475569}
+      .edge{fill:none;stroke:#64748b;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="2400" height="1800" fill="#f8fafc"/>
+  <text x="80" y="70" class="title">NEXUM AI — Base de datos NoSQL MongoDB</text>
+  <text x="80" y="108" class="subtitle">Modelo v3 · 30 colecciones · 6 compartidas + 8 por modalidad · sin datos</text><rect x="60" y="145" width="2280" height="310" rx="18" fill="#fff" stroke="#1e3a5f" stroke-width="3"/>
+  <rect x="60" y="145" width="2280" height="48" rx="15" fill="#1e3a5f"/>
+  <rect x="60" y="175" width="2280" height="18" fill="#1e3a5f"/>
+  <text x="80" y="177" class="groupTitle">NÚCLEO COMPARTIDO · 6 COLECCIONES</text><rect x="85" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="85" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="99" y="240" class="nodeTitle">catalogo_gestos</text>
+  <text x="99" y="273" class="field">codigoGesto (unique)</text>
+<text x="99" y="292" class="field">tipo/categoría</text>
+<text x="99" y="311" class="field">parámetros ML</text><rect x="457" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="457" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="471" y="240" class="nodeTitle">modalidades_aplicacion</text>
+  <text x="471" y="273" class="field">codigoModalidad</text>
+<text x="471" y="292" class="field">motorDestino</text>
+<text x="471" y="311" class="field">gestosPermitidos</text><rect x="829" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="829" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="843" y="240" class="nodeTitle">configuracion_guante</text>
+  <text x="843" y="273" class="field">codigoGuante</text>
+<text x="843" y="292" class="field">sensores / ESP32</text>
+<text x="843" y="311" class="field">calibración</text><rect x="1201" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="1201" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="1215" y="240" class="nodeTitle">configuracion_vision</text>
+  <text x="1215" y="273" class="field">codigoCamara</text>
+<text x="1215" y="292" class="field">modeloDeteccion</text>
+<text x="1215" y="311" class="field">confianzas</text><rect x="1573" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="1573" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="1587" y="240" class="nodeTitle">configuracion_sistema</text>
+  <text x="1587" y="273" class="field">modalidadActiva</text>
+<text x="1587" y="292" class="field">buffer / debounce</text>
+<text x="1587" y="311" class="field">TTL telemetría</text><rect x="1945" y="215" width="340" height="170" rx="10" fill="#fff" stroke="#1e3a5f" stroke-width="2"/>
+  <rect x="1945" y="215" width="340" height="38" rx="9" fill="#1e3a5f" opacity=".14"/>
+  <text x="1959" y="240" class="nodeTitle">modelos_entrenados</text>
+  <text x="1959" y="273" class="field">codigoModelo</text>
+<text x="1959" y="292" class="field">codigoModalidad</text>
+<text x="1959" y="311" class="field">tipo / precisión</text><rect x="60" y="510" width="750" height="1160" rx="18" fill="#fff" stroke="#2563eb" stroke-width="3"/>
+  <rect x="60" y="510" width="750" height="48" rx="15" fill="#2563eb"/>
+  <rect x="60" y="540" width="750" height="18" fill="#2563eb"/>
+  <text x="80" y="542" class="groupTitle">ARQUITECTO TRIDIMENSIONAL · THREE.JS · 8</text><rect x="85" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="85" y="585" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="99" y="610" class="nodeTitle">arquitecto_comandos</text>
+  <text x="99" y="643" class="field">código unique</text>
+<text x="99" y="662" class="field">categoría / tipo</text>
+<text x="99" y="681" class="field">parámetros</text><rect x="445" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="445" y="585" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="459" y="610" class="nodeTitle">arquitecto_reglas_semanticas</text>
+  <text x="459" y="643" class="field">gesto → comando</text>
+<text x="459" y="662" class="field">prioridad</text>
+<text x="459" y="681" class="field">contexto</text><rect x="85" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="85" y="835" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="99" y="860" class="nodeTitle">arquitecto_configuracion</text>
+  <text x="99" y="893" class="field">motor destino</text>
+<text x="99" y="912" class="field">sensibilidad</text>
+<text x="99" y="931" class="field">config activa</text><rect x="445" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="445" y="835" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="459" y="860" class="nodeTitle">arquitecto_sesiones</text>
+  <text x="459" y="893" class="field">guante + cámara</text>
+<text x="459" y="912" class="field">modelo ML</text>
+<text x="459" y="931" class="field">inicio / fin</text><rect x="85" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="85" y="1085" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="99" y="1110" class="nodeTitle">arquitecto_muestras</text>
+  <text x="99" y="1143" class="field">datos visión</text>
+<text x="99" y="1162" class="field">datos inercia</text>
+<text x="99" y="1181" class="field">confianza fusión</text><rect x="445" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="445" y="1085" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="459" y="1110" class="nodeTitle">arquitecto_historial_comandos</text>
+  <text x="459" y="1143" class="field">gesto detectado</text>
+<text x="459" y="1162" class="field">comando ejecutado</text>
+<text x="459" y="1181" class="field">resultado</text><rect x="85" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="85" y="1335" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="99" y="1360" class="nodeTitle">arquitecto_telemetria</text>
+  <text x="99" y="1393" class="field">tipo / latencia</text>
+<text x="99" y="1412" class="field">payload</text>
+<text x="99" y="1431" class="field">fechaExpiracion TTL</text><rect x="445" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <rect x="445" y="1335" width="335" height="38" rx="9" fill="#2563eb" opacity=".14"/>
+  <text x="459" y="1360" class="nodeTitle">arquitecto_escenas</text>
+  <text x="459" y="1393" class="field">estado específico</text>
+<text x="459" y="1412" class="field">pertenece a sesión</text>
+<text x="459" y="1431" class="field">datos JSON</text><path class="edge" d="M252,757 V796 H605 V835"/><path class="edge" d="M612,757 V796 H605 V835"/><path class="edge" d="M605,1007 V1046 H252 V1085"/><path class="edge" d="M605,1007 V1046 H612 V1085"/><path class="edge" d="M605,1007 V1171 H252 V1335"/><path class="edge" d="M605,1007 V1171 H612 V1335"/><rect x="825" y="510" width="750" height="1160" rx="18" fill="#fff" stroke="#dc2626" stroke-width="3"/>
+  <rect x="825" y="510" width="750" height="48" rx="15" fill="#dc2626"/>
+  <rect x="825" y="540" width="750" height="18" fill="#dc2626"/>
+  <text x="845" y="542" class="groupTitle">CONTROL VIDEOJUEGO · UNITY · 8</text><rect x="850" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="850" y="585" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="864" y="610" class="nodeTitle">videojuego_comandos</text>
+  <text x="864" y="643" class="field">código unique</text>
+<text x="864" y="662" class="field">categoría / tipo</text>
+<text x="864" y="681" class="field">parámetros</text><rect x="1210" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="1210" y="585" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="1224" y="610" class="nodeTitle">videojuego_reglas_semanticas</text>
+  <text x="1224" y="643" class="field">gesto → comando</text>
+<text x="1224" y="662" class="field">prioridad</text>
+<text x="1224" y="681" class="field">contexto</text><rect x="850" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="850" y="835" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="864" y="860" class="nodeTitle">videojuego_configuracion</text>
+  <text x="864" y="893" class="field">motor destino</text>
+<text x="864" y="912" class="field">sensibilidad</text>
+<text x="864" y="931" class="field">config activa</text><rect x="1210" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="1210" y="835" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="1224" y="860" class="nodeTitle">videojuego_sesiones</text>
+  <text x="1224" y="893" class="field">guante + cámara</text>
+<text x="1224" y="912" class="field">modelo ML</text>
+<text x="1224" y="931" class="field">inicio / fin</text><rect x="850" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="850" y="1085" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="864" y="1110" class="nodeTitle">videojuego_muestras</text>
+  <text x="864" y="1143" class="field">datos visión</text>
+<text x="864" y="1162" class="field">datos inercia</text>
+<text x="864" y="1181" class="field">confianza fusión</text><rect x="1210" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="1210" y="1085" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="1224" y="1110" class="nodeTitle">videojuego_historial_comandos</text>
+  <text x="1224" y="1143" class="field">gesto detectado</text>
+<text x="1224" y="1162" class="field">comando ejecutado</text>
+<text x="1224" y="1181" class="field">resultado</text><rect x="850" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="850" y="1335" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="864" y="1360" class="nodeTitle">videojuego_telemetria</text>
+  <text x="864" y="1393" class="field">tipo / latencia</text>
+<text x="864" y="1412" class="field">payload</text>
+<text x="864" y="1431" class="field">fechaExpiracion TTL</text><rect x="1210" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <rect x="1210" y="1335" width="335" height="38" rx="9" fill="#dc2626" opacity=".14"/>
+  <text x="1224" y="1360" class="nodeTitle">videojuego_perfil_jugador</text>
+  <text x="1224" y="1393" class="field">estado específico</text>
+<text x="1224" y="1412" class="field">pertenece a sesión</text>
+<text x="1224" y="1431" class="field">datos JSON</text><path class="edge" d="M1017,757 V796 H1370 V835"/><path class="edge" d="M1377,757 V796 H1370 V835"/><path class="edge" d="M1370,1007 V1046 H1017 V1085"/><path class="edge" d="M1370,1007 V1046 H1377 V1085"/><path class="edge" d="M1370,1007 V1171 H1017 V1335"/><path class="edge" d="M1370,1007 V1171 H1377 V1335"/><rect x="1590" y="510" width="750" height="1160" rx="18" fill="#fff" stroke="#16a34a" stroke-width="3"/>
+  <rect x="1590" y="510" width="750" height="48" rx="15" fill="#16a34a"/>
+  <rect x="1590" y="540" width="750" height="18" fill="#16a34a"/>
+  <text x="1610" y="542" class="groupTitle">INTERACCIÓN HÍBRIDA · NAVEGADOR · 8</text><rect x="1615" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1615" y="585" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1629" y="610" class="nodeTitle">hibrida_comandos</text>
+  <text x="1629" y="643" class="field">código unique</text>
+<text x="1629" y="662" class="field">categoría / tipo</text>
+<text x="1629" y="681" class="field">parámetros</text><rect x="1975" y="585" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1975" y="585" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1989" y="610" class="nodeTitle">hibrida_reglas_semanticas</text>
+  <text x="1989" y="643" class="field">gesto → comando</text>
+<text x="1989" y="662" class="field">prioridad</text>
+<text x="1989" y="681" class="field">contexto</text><rect x="1615" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1615" y="835" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1629" y="860" class="nodeTitle">hibrida_configuracion</text>
+  <text x="1629" y="893" class="field">motor destino</text>
+<text x="1629" y="912" class="field">sensibilidad</text>
+<text x="1629" y="931" class="field">config activa</text><rect x="1975" y="835" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1975" y="835" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1989" y="860" class="nodeTitle">hibrida_sesiones</text>
+  <text x="1989" y="893" class="field">guante + cámara</text>
+<text x="1989" y="912" class="field">modelo ML</text>
+<text x="1989" y="931" class="field">inicio / fin</text><rect x="1615" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1615" y="1085" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1629" y="1110" class="nodeTitle">hibrida_muestras</text>
+  <text x="1629" y="1143" class="field">datos visión</text>
+<text x="1629" y="1162" class="field">datos inercia</text>
+<text x="1629" y="1181" class="field">confianza fusión</text><rect x="1975" y="1085" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1975" y="1085" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1989" y="1110" class="nodeTitle">hibrida_historial_comandos</text>
+  <text x="1989" y="1143" class="field">gesto detectado</text>
+<text x="1989" y="1162" class="field">comando ejecutado</text>
+<text x="1989" y="1181" class="field">resultado</text><rect x="1615" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1615" y="1335" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1629" y="1360" class="nodeTitle">hibrida_telemetria</text>
+  <text x="1629" y="1393" class="field">tipo / latencia</text>
+<text x="1629" y="1412" class="field">payload</text>
+<text x="1629" y="1431" class="field">fechaExpiracion TTL</text><rect x="1975" y="1335" width="335" height="172" rx="10" fill="#fff" stroke="#16a34a" stroke-width="2"/>
+  <rect x="1975" y="1335" width="335" height="38" rx="9" fill="#16a34a" opacity=".14"/>
+  <text x="1989" y="1360" class="nodeTitle">hibrida_teclado_virtual</text>
+  <text x="1989" y="1393" class="field">estado específico</text>
+<text x="1989" y="1412" class="field">pertenece a sesión</text>
+<text x="1989" y="1431" class="field">datos JSON</text><path class="edge" d="M1782,757 V796 H2135 V835"/><path class="edge" d="M2142,757 V796 H2135 V835"/><path class="edge" d="M2135,1007 V1046 H1782 V1085"/><path class="edge" d="M2135,1007 V1046 H2142 V1085"/><path class="edge" d="M2135,1007 V1171 H1782 V1335"/><path class="edge" d="M2135,1007 V1171 H2142 V1335"/><text x="80" y="1740" class="legend">Flujo: catálogos/configuración → sesión → muestras, historial, telemetría y colección especializada.</text>
+</svg>
