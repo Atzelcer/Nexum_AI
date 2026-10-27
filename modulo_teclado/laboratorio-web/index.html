@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=17">
+    <link rel="stylesheet" href="./styles.css?v=18">
     <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
     <script type="importmap">
       {
@@ -277,17 +277,24 @@
 
         <label class="wifi-field">
           <span>Red para el guante</span>
-          <input id="wifiSsid" maxlength="32" required spellcheck="false" list="wifiNets" placeholder="Nombre de la red WiFi">
-          <datalist id="wifiNets"></datalist>
+          <input id="wifiSsid" maxlength="32" required spellcheck="false" autocomplete="off" placeholder="Detectando la red de esta PC…">
           <small id="wifiHint" class="wifi-hint"></small>
         </label>
         <label class="wifi-field">
           <span>Contrasena</span>
           <div class="wifi-pass">
-            <input id="wifiPass" type="password" maxlength="63" spellcheck="false" placeholder="Minimo 8 caracteres">
+            <input id="wifiPass" type="password" maxlength="63" spellcheck="false" autocomplete="off" placeholder="Minimo 8 caracteres">
             <button type="button" id="wifiShowPass" class="tool-btn">Ver</button>
           </div>
+          <small id="wifiPassHint" class="wifi-hint"></small>
         </label>
+
+        <ol id="wifiSteps" class="wifi-steps" hidden>
+          <li data-step="send"><i></i><span>Enviar la red al guante</span></li>
+          <li data-step="save"><i></i><span>Guardar en el guante</span></li>
+          <li data-step="join"><i></i><span>Conectar a la red WiFi</span></li>
+          <li data-step="link"><i></i><span>Enlazar con esta PC</span></li>
+        </ol>
 
         <p id="wifiMsg" class="wifi-msg" role="status"></p>
 
@@ -328,6 +335,6 @@
     </script>
     <script src="../../shared/module-wheel.js?v=9"></script>
     <script type="module" src="./app.js?v=20261007-prec2"></script>
-    <script type="module" src="./wifi_setup.js?v=4"></script>
+    <script type="module" src="./wifi_setup.js?v=5"></script>
   </body>
 </html>

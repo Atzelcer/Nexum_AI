@@ -378,8 +378,8 @@ Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. Tambi
 **Pasos**
 
 1. El modal detecta la red WiFi de la PC y sugiere la red para el guante. Si la PC está en una red de 5 GHz (por ejemplo `MiCasa-5G`), sugiere la red de 2.4 GHz del mismo router (`MiCasa`), que pertenece a la misma red local.
-2. Escribir la contraseña de esa red.
-3. Presionar **Configurar guante**.
+2. La contraseña se completa sola si la PC la tiene guardada; ambos campos se pueden editar.
+3. Presionar **Configurar guante**. El modal muestra el avance (enviar, guardar, conectar a la red, enlazar con la PC) y se cierra solo cuando el guante queda enlazado.
 
 El puente elige el camino automáticamente:
 

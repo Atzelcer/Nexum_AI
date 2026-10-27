@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = Path(__file__).resolve().parent
@@ -54,6 +54,16 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith("/api/") or (args and str(args[0]).startswith(("4", "5"))):
             super().log_message(fmt, *args)
 
+    def _same_origin(self) -> bool:
+        allowed = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
+        origin = self.headers.get("Origin")
+        if origin and origin not in allowed:
+            return False
+        if self.headers.get("Sec-Fetch-Site") not in (None, "same-origin", "none"):
+            return False
+        referer = self.headers.get("Referer")
+        return not referer or any(referer.startswith(item + "/") for item in allowed)
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.end_headers()
@@ -71,6 +81,14 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/api/red/wifi":
             self._json(200, {"ok": True, **nexum_wifi.status()})
+            return
+        if path == "/api/red/wifi/clave":
+            if not self._same_origin():
+                self._json(403, {"ok": False, "error": "origen no permitido"})
+                return
+            ssid = (parse_qs(urlparse(self.path).query).get("ssid") or [""])[0]
+            password = nexum_wifi.saved_password(ssid)
+            self._json(200, {"ok": True, "ssid": ssid, "guardada": password is not None, "clave": password or ""})
             return
         if path == "/api/db/estado":
             info = nexum_db.status()

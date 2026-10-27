@@ -173,6 +173,22 @@ def suggest(current: dict, networks: dict) -> str | None:
     return None
 
 
+def saved_password(ssid: str) -> str | None:
+    ssid = (ssid or "").strip()
+    if not ssid or ssid == GLOVE_AP_SSID or any(ch in ssid for ch in '"\r\n'):
+        return None
+    if IS_WINDOWS:
+        out = _run(["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"])
+        for line in out.splitlines():
+            key, _, value = line.partition(":")
+            if key.strip().lower() in ("contenido de la clave", "key content", "contenu de la clé"):
+                return value.strip() or None
+        return None
+    env = {**os.environ, "LC_ALL": "C"}
+    out = _run(["nmcli", "-s", "-g", "802-11-wireless-security.psk", "connection", "show", ssid], env).strip()
+    return out or None
+
+
 def serial_ports() -> list[str]:
     try:
         from serial.tools import list_ports
