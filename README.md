@@ -371,9 +371,22 @@ Presionar **Iniciar**. A partir de ese momento, cada flexión de un dedo se refl
 
 ### 5.4 Configurar la red WiFi del guante desde el panel
 
-Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. También se abre con el botón **Red WiFi del guante**. Desde ahí se indica el nombre de la red y la contraseña sin tocar el código de Arduino.
+Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. También se abre con el botón **Red WiFi del guante**. Desde ahí se configura la red del guante sin tocar el código de Arduino.
 
-> El guante y esta computadora deben estar conectados a la misma red WiFi, y esa red debe ser de 2.4 GHz. El modal muestra la red actual de la PC y avisa si su nombre parece de 5 GHz.
+> El guante y esta computadora deben estar conectados a la misma red WiFi, y esa red debe ser de 2.4 GHz.
+
+**Pasos**
+
+1. El modal detecta la red WiFi de la PC y sugiere la red para el guante. Si la PC está en una red de 5 GHz (por ejemplo `MiCasa-5G`), sugiere la red de 2.4 GHz del mismo router (`MiCasa`), que pertenece a la misma red local.
+2. Escribir la contraseña de esa red.
+3. Presionar **Configurar guante**.
+
+El puente elige el camino automáticamente:
+
+| Estado del guante | Cómo recibe la red |
+|---|---|
+| Enlazado por WiFi | Por UDP (`CMD:WIFI`) |
+| Conectado por cable USB | Por el puerto serie (requiere `pyserial`); el panel informa si el guante logró conectarse o si la contraseña fue rechazada |
 
 ```mermaid
 sequenceDiagram
@@ -381,22 +394,18 @@ sequenceDiagram
     participant B as Puente
     participant G as Guante ESP32
     P->>B: wifi_config (red y contraseña)
-    B->>G: CMD:WIFI,<red>,<contraseña>
+    B->>G: CMD:WIFI por UDP o WIFI: por USB
     G->>G: Guarda en memoria NVS
     G-->>B: SYS:WIFI_GUARDADA
-    B-->>P: Red guardada
     G->>G: Reinicia y se conecta a la nueva red
+    G-->>B: SYS:WIFI_OK,<ip> o SYS:WIFI_ERROR
+    G-->>B: MA_HELLO (enlace con la PC)
+    B-->>P: Guante enlazado
 ```
 
-**Si el guante ya está enlazado**
+**Si el guante no aparece**
 
-1. Escribir el nombre de la red (SSID) y la contraseña. El nombre se completa con la red actual de la PC.
-2. Presionar **Enviar al guante por WiFi**.
-3. El guante guarda la red, se reinicia y vuelve a enlazarse solo si la PC está en esa misma red.
-
-**Si el guante no aparece enlazado**
-
-Cuando el guante no logra conectarse a su red, crea su propia red de configuración:
+La forma más simple es conectarlo por cable USB y presionar **Configurar guante**. Sin cable, cuando el guante no logra conectarse a su red crea su propia red de configuración:
 
 | Dato | Valor |
 |---|---|
@@ -405,12 +414,8 @@ Cuando el guante no logra conectarse a su red, crea su propia red de configuraci
 | IP del guante | `192.168.50.1` |
 
 1. Conectar la PC a `NEXUM-GUANTE` y esperar a que el guante aparezca enlazado en el modal.
-2. Escribir la red definitiva y presionar **Enviar al guante por WiFi**.
+2. Escribir la red definitiva y presionar **Configurar guante**.
 3. Volver a conectar la PC a esa red.
-
-**Por cable USB**
-
-Con el guante conectado por USB, el botón **Enviar por cable USB** envía la red mediante Web Serial (Chrome o Edge). No requiere que el guante esté enlazado.
 
 La red queda guardada en el guante aunque se apague. Si no se configuró ninguna, usa `ModoB`.
 

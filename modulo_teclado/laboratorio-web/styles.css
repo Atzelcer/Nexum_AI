@@ -1824,6 +1824,11 @@ input[type="range"] {
 .wifi-msg[data-kind="bad"] { color: var(--bad); }
 .wifi-msg[data-kind="info"] { color: var(--info); }
 .wifi-msg[data-kind="warn"] { color: var(--warn); }
+.wifi-hint { font-size: 0.8rem; color: var(--muted); }
+.wifi-hint:empty { display: none; }
+.wifi-hint[data-kind="ok"] { color: var(--ok); }
+.wifi-hint[data-kind="warn"] { color: var(--warn); }
+.wifi-send { width: 100%; }
 
 .wifi-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .wifi-actions button[hidden] { display: none; }

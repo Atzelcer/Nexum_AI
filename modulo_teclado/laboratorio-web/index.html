@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=16">
+    <link rel="stylesheet" href="./styles.css?v=17">
     <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
     <script type="importmap">
       {
@@ -276,8 +276,10 @@
         </ul>
 
         <label class="wifi-field">
-          <span>Nombre de la red (SSID)</span>
-          <input id="wifiSsid" maxlength="32" required spellcheck="false" placeholder="Ej. ModoB">
+          <span>Red para el guante</span>
+          <input id="wifiSsid" maxlength="32" required spellcheck="false" list="wifiNets" placeholder="Nombre de la red WiFi">
+          <datalist id="wifiNets"></datalist>
+          <small id="wifiHint" class="wifi-hint"></small>
         </label>
         <label class="wifi-field">
           <span>Contrasena</span>
@@ -289,20 +291,14 @@
 
         <p id="wifiMsg" class="wifi-msg" role="status"></p>
 
-        <div class="wifi-actions">
-          <button type="submit" id="wifiSendBtn" class="primary">Enviar al guante por WiFi</button>
-          <button type="button" id="wifiUsbBtn">Enviar por cable USB</button>
-        </div>
+        <button type="submit" id="wifiSendBtn" class="primary wifi-send">Configurar guante</button>
 
         <details class="wifi-help">
-          <summary>El guante no aparece enlazado</summary>
+          <summary>El guante no aparece</summary>
           <ol>
-            <li>Si el guante no encuentra su red, crea su propia red <b>NEXUM-GUANTE</b> (contrasena <b>nexum1234</b>).</li>
-            <li>Conecta esta computadora a <b>NEXUM-GUANTE</b> y espera a que el guante aparezca enlazado.</li>
-            <li>Escribe aqui tu red y pulsa <b>Enviar al guante por WiFi</b>. El guante se reinicia y se conecta a ella.</li>
-            <li>Vuelve a conectar esta computadora a esa misma red.</li>
+            <li>Lo mas facil: conecta el guante a esta computadora con el cable USB y pulsa <b>Configurar guante</b>.</li>
+            <li>Sin cable: si el guante no encuentra su red, crea su propia red <b>NEXUM-GUANTE</b> (contrasena <b>nexum1234</b>). Conecta esta computadora a ella, pulsa <b>Configurar guante</b> y despues vuelve a tu red.</li>
           </ol>
-          <p>Tambien puedes conectar el guante por USB y usar <b>Enviar por cable USB</b> (Chrome o Edge).</p>
         </details>
 
         <footer class="wifi-foot">
@@ -332,6 +328,6 @@
     </script>
     <script src="../../shared/module-wheel.js?v=9"></script>
     <script type="module" src="./app.js?v=20261007-prec2"></script>
-    <script type="module" src="./wifi_setup.js?v=2"></script>
+    <script type="module" src="./wifi_setup.js?v=4"></script>
   </body>
 </html>

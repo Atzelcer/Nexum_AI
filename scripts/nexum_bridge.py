@@ -28,6 +28,7 @@ import game_bridge as game
 import laboratorio_bridge as lab
 import nexum_db
 import nexum_db_recorder
+import nexum_wifi
 
 UDP_IP = "0.0.0.0"
 PC_PORT = 5005
@@ -63,7 +64,7 @@ def load_cached_esp_ips() -> list[str]:
     seen = set()
     out = []
     for ip in ips:
-        if ip not in seen:
+        if ip not in seen and not lab.own_ip(ip):
             seen.add(ip)
             out.append(ip)
     return out[:2]
@@ -72,7 +73,7 @@ def load_cached_esp_ips() -> list[str]:
 def save_cached_esp_ips(ips: list[str] | None) -> None:
     uniq = []
     for ip in ips or []:
-        if ip and ip not in uniq:
+        if ip and ip not in uniq and not lab.own_ip(ip):
             uniq.append(ip)
     try:
         ESP_IP_CACHE.write_text("\n".join(uniq[:2]), encoding="utf-8")
@@ -206,7 +207,7 @@ def handle_hello(msg: str, addr=None) -> None:
     parts = [part.strip() for part in msg.split(",")]
     ip = (addr[0] if addr else None) or (parts[1] if len(parts) > 1 else "")
     hand_hint = parts[2] if len(parts) > 2 else None
-    if not ip:
+    if lab.own_ip(ip):
         return
     pc_ip = lab.obtener_ip_local_hacia(ip)
     udp_send_raw(f"MA_PC,{pc_ip}", ip, ESP_PORT)
@@ -502,6 +503,29 @@ def forget_all() -> None:
     kick_esp_reconnect("disconnect", hard=True)
 
 
+usb_wifi_busy = threading.Lock()
+
+
+def start_usb_wifi(ssid: str, password: str) -> bool:
+    if not nexum_wifi.serial_ports():
+        return False
+    if not usb_wifi_busy.acquire(blocking=False):
+        lab.wifi_config_error("Ya se esta configurando el guante por USB, espera unos segundos.")
+        return True
+
+    def notify(status: str, **extra) -> None:
+        lab.state.publish({"type": "wifi_config", "status": status, **extra})
+
+    def run() -> None:
+        try:
+            nexum_wifi.configure_over_usb(ssid, password, notify)
+        finally:
+            usb_wifi_busy.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return True
+
+
 lab_forget = lab.state.forget_connection
 arch_forget = arch.state.forget_connection
 
@@ -518,6 +542,7 @@ def install_hooks() -> None:
     lab.state.forget_connection = forget_all
     game.state.forget_connection = forget_all
     arch.state.forget_connection = forget_all
+    lab.wifi_usb_sender = start_usb_wifi
     nexum_db_recorder.install(lab)
 
 

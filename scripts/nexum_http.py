@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import functools
 import json
-import os
-import subprocess
 import sys
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +18,7 @@ from pymongo.errors import PyMongoError
 import nexum_auth_store
 import nexum_db
 import nexum_input_control
+import nexum_wifi
 
 PORT = 8090
 HOST = "127.0.0.1"
@@ -29,29 +28,6 @@ ISOLATED_PREFIXES = (
     "/modulo_game/panel/arcade2d.html",
     "/modulo_game/panel/ejs/",
 )
-
-
-def current_wifi_ssid() -> str | None:
-    try:
-        if sys.platform.startswith("win"):
-            raw = subprocess.run(["netsh", "wlan", "show", "interfaces"], capture_output=True, timeout=4).stdout
-            for line in raw.decode("cp850", errors="ignore").splitlines():
-                key, _, value = line.partition(":")
-                if key.strip().upper() == "SSID" and value.strip():
-                    return value.strip()
-            return None
-        raw = subprocess.run(["iwgetid", "-r"], capture_output=True, timeout=4).stdout.decode().strip()
-        if raw:
-            return raw
-        out = subprocess.run(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], capture_output=True, timeout=4,
-                             env={**os.environ, "LC_ALL": "C"}).stdout.decode(errors="ignore")
-        for line in out.splitlines():
-            active, _, ssid = line.partition(":")
-            if active == "yes" and ssid:
-                return ssid
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -94,7 +70,7 @@ class Handler(SimpleHTTPRequestHandler):
             })
             return
         if path == "/api/red/wifi":
-            self._json(200, {"ok": True, "ssid": current_wifi_ssid()})
+            self._json(200, {"ok": True, **nexum_wifi.status()})
             return
         if path == "/api/db/estado":
             info = nexum_db.status()

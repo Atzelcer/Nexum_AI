@@ -548,8 +548,33 @@ def glove_ips():
     return []
 
 
-def register_glove(ip, hand_hint=None, event="detected"):
+_own_ips = {"at": 0.0, "ips": set()}
+
+
+def own_ip(ip):
     if not ip or ip.startswith("127."):
+        return True
+    now = time.time()
+    if now - _own_ips["at"] > 30:
+        ips = set()
+        try:
+            ips.update(info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+        except OSError:
+            pass
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.connect(("8.8.8.8", 80))
+            ips.add(probe.getsockname()[0])
+            probe.close()
+        except OSError:
+            pass
+        _own_ips["at"] = now
+        _own_ips["ips"] = ips
+    return ip in _own_ips["ips"]
+
+
+def register_glove(ip, hand_hint=None, event="detected"):
+    if own_ip(ip):
         return None
     created = ip not in state.gloves
     if created and len(state.gloves) >= MAX_GLOVES:
@@ -577,7 +602,7 @@ def glove_alive(info, now=None):
 
 
 def foreign_glove(ip, now=None):
-    if not ip or ip.startswith("127.") or ip in state.gloves:
+    if own_ip(ip) or ip in state.gloves:
         return False
     return any(glove_alive(info, now) for info in state.gloves.values())
 
@@ -752,6 +777,9 @@ def handle_ws_message(raw):
         send_wifi_config(str(msg.get("ssid") or ""), str(msg.get("password") or ""))
 
 
+wifi_usb_sender = None
+
+
 def wifi_config_error(message):
     state.publish({"type": "wifi_config", "status": "error", "message": message})
 
@@ -766,9 +794,14 @@ def send_wifi_config(ssid, password):
         wifi_config_error("La contrasena debe tener entre 8 y 63 caracteres (o dejarse vacia si la red es abierta).")
         return
     target = primary_glove_ip() if state.gloves else None
-    if not target:
-        wifi_config_error("El guante no esta enlazado. Usa el cable USB o la red NEXUM-GUANTE.")
+    if target:
+        send_udp(f"CMD:WIFI,{ssid_bytes.hex()},{pass_bytes.hex()}", target)
+        print(f"[WIFI] red enviada al guante: {ssid}", flush=True)
+        state.publish({"type": "wifi_config", "status": "sent", "ssid": ssid, "via": "wifi"})
         return
-    send_udp(f"CMD:WIFI,{ssid_bytes.hex()},{pass_bytes.hex()}", target)
-    print(f"[WIFI] red enviada al guante: {ssid}", flush=True)
-    state.publish({"type": "wifi_config", "status": "sent", "ssid": ssid})
+    if wifi_usb_sender and wifi_usb_sender(ssid, password):
+        return
+    wifi_config_error(
+        "No se encuentra el guante: no esta enlazado por WiFi ni conectado por USB. "
+        "Conectalo con el cable USB o conecta esta PC a la red NEXUM-GUANTE."
+    )
