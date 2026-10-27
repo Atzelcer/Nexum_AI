@@ -1,6 +1,6 @@
 # NEXUM AI — Guía de ejecución del sistema
 
-Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: preparación del entorno, base de datos MongoDB, arranque de los servicios, emparejamiento del guante y uso de las tres modalidades de interacción.
+Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: preparación del entorno, base de datos MongoDB, configuración WiFi del guante desde el panel, arranque de los servicios, emparejamiento y uso de las tres modalidades de interacción.
 
 ---
 
@@ -44,10 +44,12 @@ flowchart LR
         DB[("MongoDB :27017<br/>base nexum_ai")]
     end
 
-    G <-->|"UDP 5005 / 5006<br/>red WiFi ModoB"| B
+    G <-->|"UDP 5005 / 5006<br/>WiFi 2.4 GHz"| B
     B <-->|"WebSocket 8765"| P1
     B -.->|"estado del sistema"| P0
     H -->|"HTTP"| NAV
+    P1 -->|"modal Red WiFi"| B
+    B -->|"UDP o USB serie"| G
     CAM --> P1
     CAM --> P2
     CAM --> P3
@@ -56,17 +58,18 @@ flowchart LR
     H <-->|"usuarios, sesiones,<br/>historial y escenas"| DB
 ```
 
-El guante se utiliza desde el panel de **Interacción híbrida**, donde también se calibra. Los paneles de **Arquitecto 3D** y **Videojuego** se controlan con la cámara, mediante visión artificial que se ejecuta en el navegador.
+El guante se utiliza desde el panel de **Interacción híbrida**, donde se configura la red WiFi, se calibra y se escribe. Los paneles de **Arquitecto 3D** y **Videojuego** se controlan con la cámara, mediante visión artificial que se ejecuta en el navegador.
 
 | Componente | Archivo | Función |
 |---|---|---|
-| Firmware del guante | `modulo_teclado/hardware-firdware/ManuelAssistGlove/` | Lee la flexión de cada dedo y la envía por UDP |
-| Puente unificado | `scripts/nexum_bridge.py` | Recibe los datos del guante, los interpreta y los distribuye a los paneles |
-| Servidor web | `scripts/nexum_http.py` | Sirve el portal, los paneles y la API de autenticación y datos |
+| Firmware del guante | `modulo_teclado/hardware-firdware/ManuelAssistGlove/` | Lee la flexión de cada dedo, guarda la red WiFi en NVS y la envía por UDP |
+| Puente unificado | `scripts/nexum_bridge.py` | Recibe los datos del guante, interpreta gestos, configura WiFi y distribuye a los paneles |
+| Servidor web | `scripts/nexum_http.py` | Sirve el portal, los paneles y la API de autenticación, datos y red |
+| Detección WiFi | `scripts/nexum_wifi.py` | Detecta la red de la PC, sugiere 2.4 GHz y envía credenciales por USB |
 | Acceso a datos | `scripts/nexum_db.py` | Conexión a MongoDB, esquema, sesiones, historial y escenas |
-| Esquema de la base | `project/bd/nexum_ai_completo.js` | Definición de las 31 colecciones con sus validadores e índices |
+| Esquema de la base | `project/bd/` | `nexum_ai_completo.js` (fuente), `nexum_ai_esquema.json` y `exportar_esquema.js` |
 | Portal | `index.html` | Inicio de sesión y acceso a los módulos |
-| Interacción híbrida | `modulo_teclado/laboratorio-web/` | Escritura con el guante y control del cursor con la cámara |
+| Interacción híbrida | `modulo_teclado/laboratorio-web/` | Modal WiFi, escritura con el guante y cursor con la cámara |
 | Arquitecto 3D | `modulo_arquitecto/panel/` | Edición de escenas tridimensionales mediante gestos |
 | Videojuego | `modulo_game/panel/` | Control de juegos Neo Geo con cámara y guante |
 
@@ -81,8 +84,8 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 | Computadora | Windows 10/11 o Linux (Ubuntu 22.04/24.04), 8 GB de RAM como mínimo |
 | Guante NEXUM | ESP32 con multiplexor TCA9548A y cinco sensores MPU |
 | Cámara web | Integrada o USB, 720p recomendado |
-| Red WiFi | Punto de acceso con nombre `ModoB` |
-| Cable USB | Solo para cargar el firmware al ESP32 |
+| Red WiFi | Cualquier red de 2.4 GHz (la PC y el guante en la misma red) |
+| Cable USB | Carga del firmware y, si hace falta, configuración WiFi desde el panel |
 
 ### 2.2 Software
 
@@ -92,7 +95,8 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 | MongoDB Community Server | 7.0 o superior | Base de datos del sistema |
 | Node.js | 18 o superior (opcional) | Solo para regenerar el esquema JSON si se modifica el script de la base |
 | Navegador | Chrome o Edge actualizado | Paneles y visión por cámara |
-| Arduino IDE | 2.x con el paquete de placas `esp32` | Carga del firmware |
+| Arduino IDE o arduino-cli | 2.x / ESP32 core | Carga del firmware (una sola vez) |
+| pyserial | incluido en `requirements.txt` | Configuración WiFi del guante por cable USB |
 
 ### 2.3 Conectividad
 
@@ -225,14 +229,14 @@ Cada vez que se utilice el sistema, el arranque debe seguir este orden. Respetar
 
 ```mermaid
 flowchart TD
-    S0["0. Verificar que MongoDB esté activo"] --> S1["1. Conectar la PC a la red ModoB"]
+    S0["0. Verificar que MongoDB esté activo"] --> S1["1. Conectar la PC a WiFi 2.4 GHz"]
     S1 --> S2["2. Iniciar el servidor web"]
     S2 --> S3["3. Iniciar el puente unificado"]
     S3 --> S4["4. Encender el guante"]
     S4 --> S5["5. Abrir el portal en el navegador"]
     S5 --> S6["6. Iniciar sesión"]
     S6 --> S7["7. Elegir la modalidad"]
-    S7 --> S8["8. Calibrar e iniciar"]
+    S7 --> S8["8. Configurar WiFi si hace falta,<br/>calibrar e iniciar"]
 ```
 
 ### Paso 0. Verificar MongoDB
@@ -313,9 +317,9 @@ El portal muestra un indicador de estado que confirma que el servidor, el puente
 
 Desde el portal, seleccionar una de las tres modalidades: **Interacción**, **Arquitecto 3D** o **Videojuego**.
 
-### Paso 8. Calibrar e iniciar
+### Paso 8. Configurar WiFi, calibrar e iniciar
 
-Para usar el guante, abrir la modalidad **Interacción** y seguir el procedimiento de la sección siguiente. Las modalidades **Arquitecto 3D** y **Videojuego** solo requieren activar la cámara, como se describe en la sección 6.
+Al abrir **Interacción híbrida**, aparece el modal **Red WiFi**: la red y la contraseña de la PC se completan solas; basta con revisarlas y pulsar **Configurar guante** (sección 5.4). Si el guante ya está enlazado, el modal se cierra solo. Después, calibrar e iniciar como se indica en la sección 5. Las modalidades **Arquitecto 3D** y **Videojuego** solo requieren activar la cámara (sección 6).
 
 ---
 
@@ -371,15 +375,15 @@ Presionar **Iniciar**. A partir de ese momento, cada flexión de un dedo se refl
 
 ### 5.4 Configurar la red WiFi del guante desde el panel
 
-Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. También se abre con el botón **Red WiFi del guante**. Desde ahí se configura la red del guante sin tocar el código de Arduino.
+Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. También se abre con el botón **Red WiFi del guante**. Desde ahí se configura la red del guante sin tocar Arduino. Si el guante ya está enlazado al entrar, el modal avisa y se cierra solo.
 
 > El guante y esta computadora deben estar conectados a la misma red WiFi, y esa red debe ser de 2.4 GHz.
 
 **Pasos**
 
-1. El modal detecta la red WiFi de la PC y sugiere la red para el guante. Si la PC está en una red de 5 GHz (por ejemplo `MiCasa-5G`), sugiere la red de 2.4 GHz del mismo router (`MiCasa`), que pertenece a la misma red local.
-2. La contraseña se completa sola si la PC la tiene guardada; ambos campos se pueden editar.
-3. Presionar **Configurar guante**. El modal muestra el avance (enviar, guardar, conectar a la red, enlazar con la PC) y se cierra solo cuando el guante queda enlazado.
+1. El modal coloca automáticamente el nombre de la red de la PC. Si la PC está en 5 GHz (por ejemplo `MiCasa-5G`), sugiere la red 2.4 GHz del mismo router (`MiCasa`). El campo se puede editar.
+2. La contraseña se completa sola si Windows o Linux la tienen guardada para esa red; también se puede editar o revelar con **Ver**.
+3. Presionar **Configurar guante**. El modal muestra cuatro pasos (enviar, guardar, conectar a la red, enlazar con la PC) y se cierra solo cuando el guante queda enlazado.
 
 El puente elige el camino automáticamente:
 
@@ -598,6 +602,8 @@ El servidor web expone estas rutas, que usan los paneles:
 | Método | Ruta | Uso |
 |---|---|---|
 | GET | `/api/db/estado` | Estado de la conexión y documentos por colección |
+| GET | `/api/red/wifi` | Red actual de la PC, banda, redes cercanas, sugerencia 2.4 GHz y puertos USB del guante |
+| GET | `/api/red/wifi/clave?ssid=…` | Contraseña guardada en la PC para esa red (solo desde el panel local) |
 | POST | `/api/auth/login`, `/api/auth/register` | Inicio de sesión y registro |
 | POST | `/api/sesiones/iniciar` | Abre una sesión (`modalidad`: `hibrida`, `arquitecto` o `videojuego`) |
 | POST | `/api/sesiones/finalizar` | Cierra una sesión y actualiza el perfil del jugador |
@@ -648,8 +654,9 @@ flowchart LR
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `puerto 5005 ocupado` al iniciar el puente | Ya hay otro puente en ejecución | Cerrar la otra terminal del puente o finalizar el proceso `python.exe` correspondiente |
-| El guante no aparece como enlazado | El guante y la PC están en redes distintas | Configurar la red desde el modal **Red WiFi del guante** (sección 5.4) y conectar la PC a esa misma red |
-| El guante no se conecta a la red configurada | La red es de 5 GHz o la contraseña es incorrecta | Usar una red de 2.4 GHz. El guante abre la red `NEXUM-GUANTE` para volver a configurarlo |
+| El guante no aparece como enlazado | El guante y la PC están en redes distintas | Abrir el modal **Red WiFi del guante** (sección 5.4). Con cable USB o conectando la PC a `NEXUM-GUANTE`, pulsar **Configurar guante** y luego unir la PC a esa misma red |
+| El guante no se conecta a la red configurada | La red es de 5 GHz o la contraseña es incorrecta | Usar una red de 2.4 GHz. El guante abre `NEXUM-GUANTE` (clave `nexum1234`) para volver a configurarlo |
+| El modal no completa la contraseña | La PC no tiene esa red guardada | Escribirla a mano; en Windows debe existir el perfil WiFi con clave |
 | Mensaje "Otro ESP32 intenta emparejarse" | Hay un segundo guante encendido | Apagar el guante que no se utiliza |
 | La barra de calibración no avanza | Se perdió la conexión durante la calibración | Esperar unos segundos, presionar **Cerrar** y volver a **Calibrar** |
 | El panel de Interacción no se conecta al puente | El puente no está en ejecución | Iniciar `nexum_bridge.py`, recargar la página y presionar **Conectar puente** |
@@ -696,3 +703,15 @@ En Linux, reemplazar `.venv/Scripts/python.exe` por `.venv/bin/python`.
 | Interacción híbrida | `http://127.0.0.1:8090/modulo_teclado/laboratorio-web/` |
 | Arquitecto 3D | `http://127.0.0.1:8090/modulo_arquitecto/panel/` |
 | Videojuego | `http://127.0.0.1:8090/modulo_game/panel/` |
+
+### Estructura del repositorio
+
+| Ruta | Contenido |
+|---|---|
+| `scripts/` | Puente, servidor HTTP, MongoDB, WiFi y autenticación |
+| `project/bd/` | Esquema MongoDB (`nexum_ai_completo.js`, JSON y exportador) |
+| `modulo_teclado/` | Firmware del guante y panel de interacción híbrida |
+| `modulo_arquitecto/` | Panel Arquitecto 3D |
+| `modulo_game/` | Panel de videojuego y emulador |
+| `portal/` | Recursos del portal (animación, estilos compartidos) |
+| `index.html` | Portal de inicio |
