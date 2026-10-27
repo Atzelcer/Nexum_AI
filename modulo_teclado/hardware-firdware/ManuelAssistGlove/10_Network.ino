@@ -15,23 +15,122 @@ void enviarAPC(const String &msg) {
   }
 }
 
+void cargarCredenciales() {
+  Preferences prefs;
+  prefs.begin("nexum", true);
+  wifiSsid = prefs.getString("ssid", WIFI_SSID);
+  wifiPass = prefs.getString("pass", WIFI_PASS);
+  prefs.end();
+  if (wifiSsid.length() == 0) {
+    wifiSsid = WIFI_SSID;
+    wifiPass = WIFI_PASS;
+  }
+  Serial.println("SYS:WIFI_RED," + wifiSsid);
+}
+
+bool hexATexto(const String &hex, String &out) {
+  out = "";
+  if (hex.length() % 2 != 0) return false;
+  for (unsigned int i = 0; i < hex.length(); i += 2) {
+    char par[3] = { hex.charAt(i), hex.charAt(i + 1), 0 };
+    char *fin = nullptr;
+    long valor = strtol(par, &fin, 16);
+    if (*fin != 0) return false;
+    out += (char)valor;
+  }
+  return true;
+}
+
+void aplicarWifi(const String &ssidHex, const String &passHex) {
+  String ssid, pass;
+  if (!hexATexto(ssidHex, ssid) || !hexATexto(passHex, pass)) {
+    enviarSistema("WIFI_INVALIDA,formato");
+    return;
+  }
+  if (ssid.length() < 1 || ssid.length() > 32) {
+    enviarSistema("WIFI_INVALIDA,nombre");
+    return;
+  }
+  if (pass.length() != 0 && (pass.length() < 8 || pass.length() > 63)) {
+    enviarSistema("WIFI_INVALIDA,contrasena");
+    return;
+  }
+  Preferences prefs;
+  prefs.begin("nexum", false);
+  prefs.putString("ssid", ssid);
+  prefs.putString("pass", pass);
+  prefs.end();
+  enviarSistema("WIFI_GUARDADA," + ssid);
+  delay(400);
+  enviarSistema("REINICIANDO_WIFI");
+  delay(300);
+  ESP.restart();
+}
+
+void procesarLineaSerial(String linea) {
+  linea.trim();
+  if (linea.startsWith("WIFI:")) {
+    int sep = linea.indexOf(':', 5);
+    if (sep < 0) {
+      Serial.println("SYS:WIFI_INVALIDA,formato");
+      return;
+    }
+    aplicarWifi(linea.substring(5, sep), linea.substring(sep + 1));
+  } else if (linea == "WIFI_INFO") {
+    Serial.println(String("SYS:WIFI_INFO,") + (apActiva ? String("AP," AP_SSID) : String("STA,") + wifiSsid));
+  }
+}
+
+void leerSerial() {
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (serialLinea.length()) procesarLineaSerial(serialLinea);
+      serialLinea = "";
+    } else if (serialLinea.length() < 220) {
+      serialLinea += c;
+    }
+  }
+}
+
+bool redLista() {
+  return apActiva || WiFi.status() == WL_CONNECTED;
+}
+
+IPAddress ipLocal() {
+  return apActiva ? WiFi.softAPIP() : WiFi.localIP();
+}
+
 void abrirUdp() {
   udp.stop();
   udpListo = udp.begin(ESP_PORT) == 1;
   ultimoHello = 0;
-  enviarSistema("WIFI_OK," + WiFi.localIP().toString());
+  enviarSistema("WIFI_OK," + ipLocal().toString());
+}
+
+void iniciarPuntoAcceso() {
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(AP_IP, AP_IP, AP_MASK);
+  WiFi.softAP(AP_SSID, AP_PASS);
+  apActiva = true;
+  ultimoIntentoWifi = millis();
+  abrirUdp();
+  enviarSistema(String("AP_ACTIVO,") + AP_SSID);
 }
 
 void iniciarRed() {
+  apActiva = false;
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
 
-  Serial.print("SYS:WIFI_CONECTANDO");
+  Serial.print("SYS:WIFI_CONECTANDO," + wifiSsid);
   unsigned long inicio = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - inicio < 12000) {
     delay(300);
+    leerSerial();
     Serial.print(".");
   }
   Serial.println();
@@ -40,19 +139,20 @@ void iniciarRed() {
   if (WiFi.status() == WL_CONNECTED) {
     abrirUdp();
   } else {
-    enviarSistema("WIFI_ERROR");
+    enviarSistema("WIFI_ERROR," + wifiSsid);
+    iniciarPuntoAcceso();
   }
 }
 
 void enviarHello() {
-  if (WiFi.status() != WL_CONNECTED || !udpListo) return;
-  String msg = "MA_HELLO," + WiFi.localIP().toString();
+  if (!redLista() || !udpListo) return;
+  String msg = "MA_HELLO," + ipLocal().toString();
   if (GLOVE_HAND[0] || gloveHandId[0]) {
     msg += ",";
     msg += (gloveHandId[0] ? gloveHandId : GLOVE_HAND);
   }
   enviarUDP(msg, IPAddress(255, 255, 255, 255), PC_PORT);
-  IPAddress subred = WiFi.broadcastIP();
+  IPAddress subred = apActiva ? AP_BROADCAST : WiFi.broadcastIP();
   if (subred != IPAddress(255, 255, 255, 255) && subred != IPAddress(0, 0, 0, 0)) {
     enviarUDP(msg, subred, PC_PORT);
   }
@@ -198,12 +298,37 @@ void procesarComando(const String &msg) {
     return;
   }
 
+  if (msg.startsWith("CMD:WIFI,")) {
+    int sep = msg.indexOf(',', 9);
+    if (sep < 0) {
+      enviarSistema("WIFI_INVALIDA,formato");
+      return;
+    }
+    aplicarWifi(msg.substring(9, sep), msg.substring(sep + 1));
+    return;
+  }
+
+  if (msg == "CMD:WIFI_INFO") {
+    enviarSistema(String("WIFI_INFO,") + (apActiva ? String("AP," AP_SSID) : String("STA,") + wifiSsid));
+    return;
+  }
+
   if (msg == "CMD:PING") {
     enviarSistema("PONG");
   }
 }
 
 void vigilarWifi() {
+  if (apActiva) {
+    if (!pcConectada && WiFi.softAPgetStationNum() == 0 && millis() - ultimoIntentoWifi > AP_REINTENTO_MS) {
+      Serial.println("SYS:WIFI_REINTENTO," + wifiSsid);
+      udp.stop();
+      udpListo = false;
+      WiFi.softAPdisconnect(true);
+      iniciarRed();
+    }
+    return;
+  }
   bool conectado = WiFi.status() == WL_CONNECTED;
   if (!conectado) {
     if (udpListo || pcConectada) {
@@ -215,12 +340,18 @@ void vigilarWifi() {
     }
     if (millis() - ultimoIntentoWifi > WIFI_RETRY_MS) {
       ultimoIntentoWifi = millis();
+      if (++reintentosWifi > 3) {
+        reintentosWifi = 0;
+        iniciarPuntoAcceso();
+        return;
+      }
       Serial.println("SYS:WIFI_REINTENTO");
       WiFi.disconnect();
-      WiFi.begin(WIFI_SSID, WIFI_PASS);
+      WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
     }
     return;
   }
+  reintentosWifi = 0;
   if (!udpListo) abrirUdp();
 }
 
@@ -243,7 +374,7 @@ void procesarRed() {
     int packetSize = udp.parsePacket();
     if (!packetSize) break;
 
-    char buffer[160];
+    char buffer[256];
     int len = udp.read(buffer, sizeof(buffer) - 1);
     if (len <= 0) continue;
     buffer[len] = '\0';

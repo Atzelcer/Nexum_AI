@@ -23,8 +23,7 @@ WHEEL_ARM_TIMEOUT = 2.5
 MAX_GLOVES = 1
 GLOVE_TIMEOUT_SECONDS = 12.0
 GLOVE_TIMEOUT_CALIBRATING = 90.0
-GLOVE_GONE_SYS = ("DESCONECTANDO", "CONEXION_CERRADA", "PC_TIMEOUT", "WIFI_PERDIDO")
-
+GLOVE_GONE_SYS = ("DESCONECTANDO", "CONEXION_CERRADA", "PC_TIMEOUT", "WIFI_PERDIDO", "REINICIANDO_WIFI")
 DEDOS_ORDEN = ["menique", "anular", "medio", "indice", "pulgar"]
 MODES = ["letters", "numbers", "cursor"]
 HANDS = ("r", "l")
@@ -749,3 +748,27 @@ def handle_ws_message(raw):
                 state.waiting_for_rest = not state.all_resting()
     elif action == "vision_cursor":
         state.handle_vision_cursor(msg)
+    elif action == "wifi_config":
+        send_wifi_config(str(msg.get("ssid") or ""), str(msg.get("password") or ""))
+
+
+def wifi_config_error(message):
+    state.publish({"type": "wifi_config", "status": "error", "message": message})
+
+
+def send_wifi_config(ssid, password):
+    ssid_bytes = ssid.encode("utf-8")
+    pass_bytes = password.encode("utf-8")
+    if not 1 <= len(ssid_bytes) <= 32:
+        wifi_config_error("El nombre de la red debe tener entre 1 y 32 caracteres.")
+        return
+    if pass_bytes and not 8 <= len(pass_bytes) <= 63:
+        wifi_config_error("La contrasena debe tener entre 8 y 63 caracteres (o dejarse vacia si la red es abierta).")
+        return
+    target = primary_glove_ip() if state.gloves else None
+    if not target:
+        wifi_config_error("El guante no esta enlazado. Usa el cable USB o la red NEXUM-GUANTE.")
+        return
+    send_udp(f"CMD:WIFI,{ssid_bytes.hex()},{pass_bytes.hex()}", target)
+    print(f"[WIFI] red enviada al guante: {ssid}", flush=True)
+    state.publish({"type": "wifi_config", "status": "sent", "ssid": ssid})

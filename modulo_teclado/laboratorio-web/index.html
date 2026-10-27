@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=14">
+    <link rel="stylesheet" href="./styles.css?v=16">
     <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
     <script type="importmap">
       {
@@ -133,6 +133,7 @@
                 <button id="disconnectSerialBtn" type="button">Cerrar</button>
               </div>
               <button id="simulateBtn" type="button" class="ghost wide">Demo local</button>
+              <button id="wifiSetupBtn" type="button" class="ghost wide">Red WiFi del guante</button>
             </div>
             <div class="calibration-box">
               <div class="calibration-track">
@@ -255,6 +256,62 @@
       </div>
     </div>
 
+    <div id="wifiModal" class="wifi-modal" hidden>
+      <div class="wifi-backdrop" data-wifi-close></div>
+      <form class="wifi-card" id="wifiForm" role="dialog" aria-modal="true" aria-labelledby="wifiTitle" autocomplete="off">
+        <header class="wifi-head">
+          <p class="lab-kicker">Configuracion del guante</p>
+          <h2 id="wifiTitle">Red WiFi</h2>
+          <button type="button" class="wifi-x" data-wifi-close aria-label="Cerrar">×</button>
+        </header>
+
+        <div class="wifi-notice">
+          <strong>El guante y esta computadora deben estar conectados a la misma red WiFi.</strong>
+          <span>El ESP32 solo funciona con redes de 2.4 GHz.</span>
+        </div>
+
+        <ul class="wifi-status">
+          <li><span>Esta PC esta en</span><b id="wifiPcNet">detectando…</b></li>
+          <li><span>Guante</span><b id="wifiGloveNet">buscando…</b></li>
+        </ul>
+
+        <label class="wifi-field">
+          <span>Nombre de la red (SSID)</span>
+          <input id="wifiSsid" maxlength="32" required spellcheck="false" placeholder="Ej. ModoB">
+        </label>
+        <label class="wifi-field">
+          <span>Contrasena</span>
+          <div class="wifi-pass">
+            <input id="wifiPass" type="password" maxlength="63" spellcheck="false" placeholder="Minimo 8 caracteres">
+            <button type="button" id="wifiShowPass" class="tool-btn">Ver</button>
+          </div>
+        </label>
+
+        <p id="wifiMsg" class="wifi-msg" role="status"></p>
+
+        <div class="wifi-actions">
+          <button type="submit" id="wifiSendBtn" class="primary">Enviar al guante por WiFi</button>
+          <button type="button" id="wifiUsbBtn">Enviar por cable USB</button>
+        </div>
+
+        <details class="wifi-help">
+          <summary>El guante no aparece enlazado</summary>
+          <ol>
+            <li>Si el guante no encuentra su red, crea su propia red <b>NEXUM-GUANTE</b> (contrasena <b>nexum1234</b>).</li>
+            <li>Conecta esta computadora a <b>NEXUM-GUANTE</b> y espera a que el guante aparezca enlazado.</li>
+            <li>Escribe aqui tu red y pulsa <b>Enviar al guante por WiFi</b>. El guante se reinicia y se conecta a ella.</li>
+            <li>Vuelve a conectar esta computadora a esa misma red.</li>
+          </ol>
+          <p>Tambien puedes conectar el guante por USB y usar <b>Enviar por cable USB</b> (Chrome o Edge).</p>
+        </details>
+
+        <footer class="wifi-foot">
+          <label class="wifi-check"><input type="checkbox" id="wifiSkipNext"> No mostrar al entrar</label>
+          <button type="button" class="ghost" data-wifi-close>Omitir</button>
+        </footer>
+      </form>
+    </div>
+
     <script>
       window.NEXUM_ORBIT = {
         current: "computador",
@@ -275,5 +332,6 @@
     </script>
     <script src="../../shared/module-wheel.js?v=9"></script>
     <script type="module" src="./app.js?v=20261007-prec2"></script>
+    <script type="module" src="./wifi_setup.js?v=2"></script>
   </body>
 </html>

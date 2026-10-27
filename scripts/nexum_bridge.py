@@ -235,6 +235,7 @@ def confirm_glove(ip: str | None) -> None:
     })
     publish_all({"type": "system", "message": f"Emparejado con {ip}"})
     lab.state.publish(lab.gloves_payload("hello"))
+    udp_send_raw("CMD:WIFI_INFO", ip, ESP_PORT)
 
 
 def drop_glove_all(ip: str | None, reason: str) -> None:
@@ -271,6 +272,15 @@ def handle_sys(msg: str, addr=None) -> None:
         confirm_glove(src_ip)
     else:
         lab.note_glove_sys(src_ip, system_msg)
+    if system_msg.startswith("WIFI_GUARDADA,"):
+        lab.state.publish({"type": "wifi_config", "status": "saved", "ssid": system_msg.split(",", 1)[1]})
+    elif system_msg.startswith("WIFI_INVALIDA,"):
+        lab.state.publish({"type": "wifi_config", "status": "error",
+                           "message": f"El guante rechazo los datos ({system_msg.split(',', 1)[1]})."})
+    elif system_msg.startswith("WIFI_INFO,"):
+        parts = system_msg.split(",", 2)
+        lab.state.publish({"type": "wifi_config", "status": "info", "mode": parts[1] if len(parts) > 1 else "",
+                           "ssid": parts[2] if len(parts) > 2 else ""})
     if system_msg in ("ESTADO_CALIBRADO", "ESTADO_SIN_CALIBRAR"):
         pct = 100 if system_msg == "ESTADO_CALIBRADO" else 0
         publish_all({

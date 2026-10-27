@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <Preferences.h>
 #include <math.h>
 
 #define SDA_PIN 21
@@ -20,6 +21,18 @@
 
 #define WIFI_SSID "ModoB"
 #define WIFI_PASS "1234567899"
+#define AP_SSID "NEXUM-GUANTE"
+#define AP_PASS "nexum1234"
+
+String wifiSsid = WIFI_SSID;
+String wifiPass = WIFI_PASS;
+bool apActiva = false;
+uint8_t reintentosWifi = 0;
+String serialLinea = "";
+const IPAddress AP_IP(192, 168, 50, 1);
+const IPAddress AP_MASK(255, 255, 255, 0);
+const IPAddress AP_BROADCAST(192, 168, 50, 255);
+const unsigned long AP_REINTENTO_MS = 60000;
 
 const char* GLOVE_HAND = "";
 char gloveHandId[3] = "";
@@ -138,6 +151,8 @@ const int   CAL_MUESTRAS     = 500;
 const int   CAL_MAX_INTENTOS = 4;
 const float CAL_MAX_STD_GYRO = 3.0;
 
+void cargarCredenciales();
+void leerSerial();
 void iniciarRed();
 void abrirUdp();
 void vigilarWifi();
@@ -183,6 +198,7 @@ void setup() {
   Wire.setTimeOut(80);
 #endif
 
+  cargarCredenciales();
   iniciarRed();
 
   gloveHandId[0] = 0;
@@ -209,6 +225,7 @@ void setup() {
 }
 
 void loop() {
+  leerSerial();
   procesarRed();
 
   if (calibracionPendiente) {

@@ -96,7 +96,8 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 
 ### 2.3 Conectividad
 
-- La computadora y el guante deben estar conectados a la misma red WiFi `ModoB`.
+- La computadora y el guante deben estar conectados a la misma red WiFi. La red se configura desde el panel de interacción híbrida (sección 5.4); si no se configuró, el guante usa `ModoB`.
+- El ESP32 solo funciona con redes de 2.4 GHz. Las redes de 5 GHz no son visibles para el guante.
 - Los paneles descargan Three.js y MediaPipe desde CDN, por lo que la red debe tener acceso a Internet.
 
 ---
@@ -189,12 +190,21 @@ El comando crea la base `nexum_ai` con sus 31 colecciones, validadores e índice
 
 ### 3.3 Cargar el firmware al guante
 
+El firmware se carga una sola vez. A partir de entonces la red WiFi se cambia desde el panel, sin volver a abrir Arduino.
+
 1. Abrir Arduino IDE.
 2. Abrir el archivo `modulo_teclado/hardware-firdware/ManuelAssistGlove/ManuelAssistGlove.ino`.
-3. Verificar en las primeras líneas que `WIFI_SSID` y `WIFI_PASS` correspondan a la red `ModoB`.
-4. Seleccionar la placa **ESP32 Dev Module** y el puerto COM correspondiente.
-5. Presionar **Subir** y esperar el mensaje de carga completada.
-6. Desconectar el cable USB y alimentar el guante con su batería.
+3. Seleccionar la placa **ESP32 Dev Module** y el puerto COM correspondiente.
+4. Presionar **Subir** y esperar el mensaje de carga completada.
+5. Desconectar el cable USB y alimentar el guante con su batería.
+
+También se puede cargar desde la terminal con `arduino-cli`, desde la carpeta del firmware:
+
+```bash
+arduino-cli compile --upload -p COM3 --fqbn esp32:esp32:esp32 .
+```
+
+Reemplazar `COM3` por el puerto del guante (`/dev/ttyUSB0` en Linux).
 
 ### 3.4 Preparar el emulador web (modalidad Videojuego)
 
@@ -231,7 +241,7 @@ MongoDB se inicia solo con el sistema operativo. Si se detuvo, iniciarlo con `ne
 
 ### Paso 1. Conectar la computadora a la red
 
-Conectar la computadora a la red WiFi `ModoB`. Es la misma red a la que se conecta el guante.
+Conectar la computadora a la misma red WiFi de 2.4 GHz a la que se conecta el guante. Si el guante debe usar otra red, se configura desde el panel de interacción híbrida (sección 5.4).
 
 ### Paso 2. Iniciar el servidor web
 
@@ -358,6 +368,51 @@ Presionar **Iniciar**. A partir de ese momento, cada flexión de un dedo se refl
 | **Iniciar** | Activa el envío continuo de datos desde el guante |
 | **Pausar** | Detiene el envío sin desconectar el guante |
 | **Cerrar** | Desconecta el guante del puente |
+
+### 5.4 Configurar la red WiFi del guante desde el panel
+
+Al entrar al panel de interacción híbrida aparece el modal **Red WiFi**. También se abre con el botón **Red WiFi del guante**. Desde ahí se indica el nombre de la red y la contraseña sin tocar el código de Arduino.
+
+> El guante y esta computadora deben estar conectados a la misma red WiFi, y esa red debe ser de 2.4 GHz. El modal muestra la red actual de la PC y avisa si su nombre parece de 5 GHz.
+
+```mermaid
+sequenceDiagram
+    participant P as Panel
+    participant B as Puente
+    participant G as Guante ESP32
+    P->>B: wifi_config (red y contraseña)
+    B->>G: CMD:WIFI,<red>,<contraseña>
+    G->>G: Guarda en memoria NVS
+    G-->>B: SYS:WIFI_GUARDADA
+    B-->>P: Red guardada
+    G->>G: Reinicia y se conecta a la nueva red
+```
+
+**Si el guante ya está enlazado**
+
+1. Escribir el nombre de la red (SSID) y la contraseña. El nombre se completa con la red actual de la PC.
+2. Presionar **Enviar al guante por WiFi**.
+3. El guante guarda la red, se reinicia y vuelve a enlazarse solo si la PC está en esa misma red.
+
+**Si el guante no aparece enlazado**
+
+Cuando el guante no logra conectarse a su red, crea su propia red de configuración:
+
+| Dato | Valor |
+|---|---|
+| Red | `NEXUM-GUANTE` |
+| Contraseña | `nexum1234` |
+| IP del guante | `192.168.50.1` |
+
+1. Conectar la PC a `NEXUM-GUANTE` y esperar a que el guante aparezca enlazado en el modal.
+2. Escribir la red definitiva y presionar **Enviar al guante por WiFi**.
+3. Volver a conectar la PC a esa red.
+
+**Por cable USB**
+
+Con el guante conectado por USB, el botón **Enviar por cable USB** envía la red mediante Web Serial (Chrome o Edge). No requiere que el guante esté enlazado.
+
+La red queda guardada en el guante aunque se apague. Si no se configuró ninguna, usa `ModoB`.
 
 ---
 
@@ -588,7 +643,8 @@ flowchart LR
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `puerto 5005 ocupado` al iniciar el puente | Ya hay otro puente en ejecución | Cerrar la otra terminal del puente o finalizar el proceso `python.exe` correspondiente |
-| El guante no aparece como enlazado | El guante o la PC no están en la red `ModoB` | Verificar la red de ambos y reiniciar el guante con el puente ya iniciado |
+| El guante no aparece como enlazado | El guante y la PC están en redes distintas | Configurar la red desde el modal **Red WiFi del guante** (sección 5.4) y conectar la PC a esa misma red |
+| El guante no se conecta a la red configurada | La red es de 5 GHz o la contraseña es incorrecta | Usar una red de 2.4 GHz. El guante abre la red `NEXUM-GUANTE` para volver a configurarlo |
 | Mensaje "Otro ESP32 intenta emparejarse" | Hay un segundo guante encendido | Apagar el guante que no se utiliza |
 | La barra de calibración no avanza | Se perdió la conexión durante la calibración | Esperar unos segundos, presionar **Cerrar** y volver a **Calibrar** |
 | El panel de Interacción no se conecta al puente | El puente no está en ejecución | Iniciar `nexum_bridge.py`, recargar la página y presionar **Conectar puente** |
