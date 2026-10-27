@@ -1,9 +1,7 @@
-# Entorno Python unico (raiz)
 .venv/
 venv/
 env/
 
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -11,18 +9,17 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Datos de entrenamiento generados
-modulo_game/data/*.csv
-
-# Emulador / ROMs (pesado; no versionar en git local base)
 modulo_game/gameNeogeo/
+modulo_game/panel/web-roms/
+modulo_game/panel/ejs/cores/
 
-# IDE / OS
 .idea/
 .vscode/
 *.swp
 Thumbs.db
 .DS_Store
 
-# Extraidos temporales
-documentos/_*.txt
+.nexum_last_esp_ip
+project/database/runtime/usuarios.json
+project/database/runtime/*.tmp
+project/database/runtime/*.bak

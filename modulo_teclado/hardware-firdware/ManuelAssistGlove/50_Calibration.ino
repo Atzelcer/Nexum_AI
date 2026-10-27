@@ -84,7 +84,9 @@ void calibrarSensores() {
   envioDatosHabilitado = false;
   enviarSistema("CALIBRANDO");
   enviarCalibracionProgreso(0, NUM_SENSORES);
-  delay(1200);
+  Serial.println("SYS:CAL_INICIO_MANO_QUIETA");
+  Serial.flush();
+  delay(800);
 
   for (uint8_t i = 0; i < NUM_SENSORES; i++) {
     gyroOffsetX[i] = 0;
@@ -93,6 +95,10 @@ void calibrarSensores() {
     neutralAngleX[i] = 0;
     neutralAngleY[i] = 0;
     resetearDedo(i);
+
+    Serial.print("SYS:CAL_DEDO_");
+    Serial.println(dedos[i]);
+    Serial.flush();
 
     if (sensorOK[i]) {
       bool quieto = false;
@@ -103,7 +109,7 @@ void calibrarSensores() {
         quieto = calibrarDedoUnaVez(i);
         if (!quieto) {
           enviarSistema(String("MOVIMIENTO_EN_") + dedos[i] + "_REINTENTO_" + intento);
-          delay(400);
+          delay(350);
         }
       }
 
@@ -116,4 +122,6 @@ void calibrarSensores() {
   }
 
   enviarSistema("CALIBRACION_OK");
+  Serial.println("SYS:CAL_FIN");
+  Serial.flush();
 }

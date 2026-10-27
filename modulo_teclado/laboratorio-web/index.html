@@ -3,104 +3,277 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Manuel Assist Lab</title>
-    <link rel="stylesheet" href="./styles.css">
+    <title>NEXUM AI · Interaccion hibrida</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css?v=14">
+    <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
         }
       }
     </script>
   </head>
   <body>
-    <main class="app-shell">
-      <section class="viewer-panel" aria-label="Visor 3D">
-        <div class="topbar">
-          <div>
-            <h1>Manuel Assist Lab</h1>
-            <p id="modelStatus">Cargando modelo riggeado...</p>
-          </div>
-          <div class="toolbar">
-            <button id="resetPoseBtn" type="button" title="Resetear pose">Reset</button>
-            <button id="focusBtn" type="button" title="Centrar modelo">Centrar</button>
-            <button id="demoBtn" type="button" title="Animacion de prueba">Demo</button>
-          </div>
+    <div class="app-frame">
+      <header class="lab-nav">
+        <a class="back-link" href="../../index.html">NEXUM <span class="brand-ai">AI</span></a>
+        <div class="lab-nav-center">
+          <p class="lab-kicker">Modalidad 01</p>
+          <h1>Interaccion hibrida</h1>
         </div>
-        <div class="writing-console" aria-label="Teclado principal">
-          <div class="write-head">
-            <textarea id="textOutput" rows="2" placeholder="Texto generado automaticamente" disabled></textarea>
-            <div class="segmented" role="group" aria-label="Modo">
-              <button class="mode-btn active" type="button" data-mode="letters">ABC</button>
-              <button class="mode-btn" type="button" data-mode="numbers">123</button>
-              <button class="mode-btn" type="button" data-mode="cursor">Complementos</button>
+        <div class="lab-nav-actions">
+          <button id="resetPoseBtn" type="button" title="Reinicia mano 3D, camara, contadores, modo ABC y dedos del guante (el texto no se borra)">Reset</button>
+          <button id="focusBtn" type="button">Centrar</button>
+          <button id="demoBtn" type="button" class="accent">Demo</button>
+          <a class="nav-close" href="/index.html">Cerrar</a>
+        </div>
+      </header>
+
+      <div class="lab-grid">
+        <section class="stage" aria-label="Visor 3D">
+          <div id="sceneHost" class="scene-host">
+            <div class="stage-overlay top-left">
+              <p id="modelStatus" class="model-status">Preparando escena 3D…</p>
+              <div class="pill-row">
+                <span id="loadBadge" class="pill">Modelo: pendiente</span>
+                <span id="serialBadge" class="pill">ESP32: desconectado</span>
+                <span id="modeBadge" class="pill">Modo: letras</span>
+                <span id="visionBadge" class="pill">Vision: apagada</span>
+              </div>
+            </div>
+
+            <aside class="vision-pip" id="visionPip" hidden aria-label="Camara cursor">
+              <div class="vision-pip-head">
+                <strong><span class="pip-live-dot" aria-hidden="true"></span> Cursor vision</strong>
+                <span id="visionHint">indice=mover</span>
+              </div>
+              <div class="vision-pip-frame">
+                <video id="visionVideo" playsinline muted aria-hidden="true"></video>
+                <canvas id="visionCanvas" aria-hidden="true"></canvas>
+              </div>
+              <p id="visionStatus" class="vision-pip-note">Izq abierta=Win · punio=borrar · pulgar=clic der · menique=clic izq</p>
+            </aside>
+            <div class="stage-overlay top-right">
+              <button id="modeWheelBtn" type="button" class="mode-fab" title="Rueda de modos (Q)">
+                <span class="mode-fab-ring" aria-hidden="true"></span>
+                <span class="mode-fab-label" id="modeFabLabel">ABC</span>
+                <span class="mode-fab-hint">modos</span>
+              </button>
+            </div>
+            <div class="stage-overlay bottom">
+              <div class="finger-live" id="fingerLive" aria-hidden="true">
+                <span data-finger="pulgar">P</span>
+                <span data-finger="indice">I</span>
+                <span data-finger="medio">M</span>
+                <span data-finger="anular">A</span>
+                <span data-finger="menique">N</span>
+              </div>
+              <div id="composer" class="composer" hidden aria-live="polite">
+                <div class="composer-dial">
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <circle class="composer-track" cx="32" cy="32" r="28" />
+                    <circle class="composer-arc" cx="32" cy="32" r="28" pathLength="100" />
+                  </svg>
+                  <strong id="composerKey">a</strong>
+                </div>
+                <div class="composer-meta">
+                  <span id="composerFinger" class="composer-finger">Pulgar ×1</span>
+                  <div id="composerOptions" class="composer-options"></div>
+                  <small id="composerHint">Se confirma en 2.5 s</small>
+                </div>
+              </div>
+              <div class="viewport-hud">
+                <span>Orbit · zoom</span>
+                <span id="hudFps">—</span>
+              </div>
             </div>
           </div>
-          <div id="keyboard" class="keyboard main-keyboard"></div>
-        </div>
-        <div id="sceneHost" class="scene-host"></div>
-        <div class="status-strip">
-          <span id="loadBadge">Modelo: pendiente</span>
-          <span id="serialBadge">ESP32: desconectado</span>
-          <span id="modeBadge">Modo: letras</span>
-        </div>
-      </section>
 
-      <aside class="control-panel" aria-label="Controles del laboratorio">
-        <section class="panel-section">
-          <div class="section-head">
-            <h2>Conexión</h2>
-            <span id="lastEvent">Sin datos</span>
-          </div>
-          <div class="button-grid">
-            <button id="connectWsBtn" type="button">Conectar</button>
-            <button id="calibrateBtn" type="button">Calibrar</button>
-            <button id="startLabBtn" type="button">Iniciar</button>
-            <button id="pauseLabBtn" type="button">Pausar</button>
-            <button id="disconnectSerialBtn" type="button">Cerrar conexion</button>
-            <button id="simulateBtn" type="button">Demo local</button>
-          </div>
-          <div class="calibration-box">
-            <div class="calibration-track">
-              <div id="calibrationFill" class="calibration-fill"></div>
+          <div class="io-dock">
+            <div class="io-head">
+              <div class="io-title">
+                <label class="field-label" for="textOutput">Salida del computador</label>
+                <span id="lastEvent" class="live-chip">Sin datos</span>
+              </div>
+              <div class="io-tools">
+                <span id="textStats" class="io-stats">0 caracteres · 0 palabras</span>
+                <button id="copyTextBtn" type="button" class="tool-btn">Copiar</button>
+                <button id="backspaceBtn" type="button" class="tool-btn" title="Borrar ultimo caracter">Borrar</button>
+                <button id="clearTextBtn" type="button" class="tool-btn">Limpiar</button>
+              </div>
             </div>
-            <span id="calibrationLabel">Calibracion: 0%</span>
+            <textarea id="textOutput" rows="2" placeholder="Levanta un dedo para elegir una letra · se confirma sola en 2.5 s" disabled></textarea>
+            <div id="keyboard" class="keyboard main-keyboard"></div>
           </div>
-          <label class="field">
-            <span>WebSocket del puente</span>
-            <input id="wsUrl" value="ws://127.0.0.1:8765" spellcheck="false">
-          </label>
         </section>
 
-        <section class="panel-section">
-          <div class="section-head">
-            <h2>Dedos</h2>
-            <div class="select-stack">
-              <select id="viewSelect" aria-label="Vista">
-                <option value="r">Ver derecha</option>
-                <option value="l">Ver izquierda</option>
-                <option value="both">Ver ambas</option>
-              </select>
-              <select id="handSelect" aria-label="Mano activa">
-                <option value="r">Control derecha</option>
-                <option value="l">Control izquierda</option>
-              </select>
+        <aside class="rail" aria-label="Controles">
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Enlace</h2>
+              <span class="section-hint">Un guante · WiFi UDP</span>
             </div>
-          </div>
-          <div id="fingerControls" class="finger-controls"></div>
-        </section>
+            <ol class="link-steps" id="linkSteps">
+              <li data-step="bridge"><i></i><span>Puente</span></li>
+              <li data-step="glove"><i></i><span>Guante</span></li>
+              <li data-step="calib"><i></i><span>Calibrado</span></li>
+              <li data-step="live"><i></i><span>Activo</span></li>
+            </ol>
+            <div class="action-stack">
+              <button id="connectWsBtn" type="button" class="primary wide">Conectar puente</button>
+              <div class="button-grid">
+                <button id="calibrateBtn" type="button">Calibrar</button>
+                <button id="startLabBtn" type="button">Iniciar</button>
+                <button id="pauseLabBtn" type="button">Pausar</button>
+                <button id="disconnectSerialBtn" type="button">Cerrar</button>
+              </div>
+              <button id="simulateBtn" type="button" class="ghost wide">Demo local</button>
+            </div>
+            <div class="calibration-box">
+              <div class="calibration-track">
+                <div id="calibrationFill" class="calibration-fill"></div>
+              </div>
+              <span id="calibrationLabel">Calibracion: 0%</span>
+            </div>
+            <details class="advanced">
+              <summary>Conexion avanzada</summary>
+              <label class="field">
+                <span>WebSocket</span>
+                <input id="wsUrl" value="ws://127.0.0.1:8765" spellcheck="false">
+              </label>
+            </details>
+          </section>
 
-        <section class="panel-section compact">
-          <div class="section-head">
-            <h2>Huesos detectados</h2>
-            <span id="boneSummary">Esperando modelo</span>
-          </div>
-          <div id="boneReport" class="bone-report"></div>
-        </section>
-      </aside>
-    </main>
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Mano del guante</h2>
+              <span class="section-hint">Un solo guante</span>
+            </div>
+            <div class="hand-toggle" role="radiogroup" aria-label="Mano del guante">
+              <button type="button" class="hand-opt active" data-hand="r" role="radio" aria-checked="true">Derecha</button>
+              <button type="button" class="hand-opt" data-hand="l" role="radio" aria-checked="false">Izquierda</button>
+            </div>
+            <div id="fingerMap" class="finger-map"></div>
+            <details class="advanced">
+              <summary>Ajuste fino de articulaciones</summary>
+              <div id="fingerControls" class="finger-controls"></div>
+            </details>
+          </section>
 
-    <script type="module" src="./app.js?v=20260615-complementos-gyro-fix"></script>
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Como escribir</h2>
+            </div>
+            <ol class="howto">
+              <li><b>1</b><span>Levanta un dedo: cada toque avanza a la siguiente letra de su grupo.</span></li>
+              <li><b>2</b><span>Quedate quieto <strong>2.5 s</strong> y la letra se confirma sola.</span></li>
+              <li><b>3</b><span>Levanta <strong>4 dedos</strong> a la vez: se abre la rueda <strong>ABC · 123 · CUR</strong>. Toca 1 dedo para pasar a la siguiente opcion.</span></li>
+              <li><b>4</b><span>Espera <strong>2 s</strong> o vuelve a levantar 4 dedos para confirmar. En CUR el mouse se mueve con la camara.</span></li>
+            </ol>
+          </section>
+
+          <details class="rail-block compact advanced-block">
+            <summary class="section-head">
+              <h2>Huesos del modelo</h2>
+              <span id="boneSummary">Esperando</span>
+            </summary>
+            <div id="boneReport" class="bone-report"></div>
+          </details>
+        </aside>
+      </div>
+    </div>
+
+    <div id="modeWheel" class="mode-wheel" data-source="mouse" hidden aria-hidden="true">
+      <div class="mode-wheel-backdrop" id="modeWheelBackdrop"></div>
+      <div class="mode-wheel-stage" role="dialog" aria-label="Selector de modo">
+        <p class="mode-wheel-title" id="wheelTitle">Elige un modo</p>
+        <div class="mode-wheel-disk" id="modeWheelDisk">
+          <svg class="mode-wheel-svg" viewBox="0 0 200 200" aria-hidden="true">
+            <defs>
+              <filter id="wheelGlow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="3" result="b"/>
+                <feMerge>
+                  <feMergeNode in="b"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <circle class="wheel-track" cx="100" cy="100" r="97" />
+            <path class="wheel-slice" data-mode="letters" d=""></path>
+            <path class="wheel-slice" data-mode="numbers" d=""></path>
+            <path class="wheel-slice" data-mode="cursor" d=""></path>
+            <path class="wheel-current-arc" id="wheelCurrentArc" d=""></path>
+            <path class="wheel-progress" id="wheelProgress" d="" pathLength="100"></path>
+            <circle class="wheel-inner-ring" cx="100" cy="100" r="40" />
+          </svg>
+
+          <button type="button" class="wheel-item" data-mode="letters" style="--a: 0deg" aria-label="Letras (1)">
+            <i class="wheel-icon">Aa</i>
+            <strong>ABC</strong>
+            <em>Letras</em>
+            <span class="wheel-current-tag">Actual</span>
+          </button>
+          <button type="button" class="wheel-item" data-mode="numbers" style="--a: 120deg" aria-label="Números (2)">
+            <i class="wheel-icon">#</i>
+            <strong>123</strong>
+            <em>Números</em>
+            <span class="wheel-current-tag">Actual</span>
+          </button>
+          <button type="button" class="wheel-item" data-mode="cursor" style="--a: 240deg" aria-label="Cursor (3)">
+            <i class="wheel-icon">↖</i>
+            <strong>CUR</strong>
+            <em>Cursor</em>
+            <span class="wheel-current-tag">Actual</span>
+          </button>
+
+          <div class="wheel-hub" id="wheelHub">
+            <span id="wheelHubMode">ABC</span>
+            <small id="wheelHubHint">Letras</small>
+            <b id="wheelHubDesc">a–z con el guante</b>
+          </div>
+          <div class="wheel-needle" id="wheelNeedle" aria-hidden="true"></div>
+        </div>
+
+        <div class="wheel-legend wheel-legend--glove">
+          <span><b>☝ Toca 1 dedo</b>siguiente opción</span>
+          <span><b>⏱ Espera 2 s</b>se confirma sola</span>
+          <span><b>✋ 4 dedos</b>confirmar ya</span>
+        </div>
+        <div class="wheel-legend wheel-legend--mouse">
+          <span><b>Clic</b>elegir</span>
+          <span><b>1 · 2 · 3</b>directo</span>
+          <span><b>← →</b>mover</span>
+          <span><b>Enter</b>confirmar</span>
+          <span><b>Esc</b>cerrar</span>
+        </div>
+        <p class="mode-wheel-tip">Con el guante: levanta 4 dedos a la vez para abrir esta rueda · CUR mueve el mouse con la cámara</p>
+      </div>
+    </div>
+
+    <script>
+      window.NEXUM_ORBIT = {
+        current: "computador",
+        fabDark: true,
+        paths: {
+          inicio: "/index.html",
+          computador: "/modulo_teclado/laboratorio-web/",
+          arquitecto: "/modulo_arquitecto/panel/",
+          game: "/modulo_game/panel/"
+        },
+        onAjustes() {
+          document.querySelector(".rail")?.scrollTo({ top: 0, behavior: "smooth" });
+          document.querySelector("#connectWsBtn")?.focus();
+          const chip = document.querySelector("#lastEvent");
+          if (chip) chip.textContent = "Ajustes: panel de enlace";
+        }
+      };
+    </script>
+    <script src="../../shared/module-wheel.js?v=9"></script>
+    <script type="module" src="./app.js?v=20261007-prec2"></script>
   </body>
 </html>

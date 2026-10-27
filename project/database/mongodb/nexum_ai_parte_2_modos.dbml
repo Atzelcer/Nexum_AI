@@ -1,22 +1,3 @@
-// =============================================================================
-// NEXUM AI - PARTE 2: TRES MODOS
-// Copiar y pegar en: https://dbdiagram.io
-//
-// modalidades_aplicacion
-//   ├── MODO_ARQUITECTO
-//   │     ├── arquitecto_contextos
-//   │     ├── arquitecto_escenas
-//   │     └── arquitecto_assets
-//   ├── MODO_JUEGO
-//   │     ├── juego_emuladores
-//   │     ├── juego_catalogo
-//   │     └── juego_adaptadores
-//   └── MODO_COMPUTADOR
-//         ├── computador_mapeo_mano
-//         ├── computador_acciones_sistema
-//         └── computador_contexto_escritorio
-// =============================================================================
-
 Project nexum_ai_parte_2 {
   database_type: 'PostgreSQL / MongoDB conceptual'
   Note: 'Parte 2: modalidades_aplicacion se reparte en MODO_ARQUITECTO, MODO_JUEGO y MODO_COMPUTADOR.'
@@ -50,10 +31,6 @@ TableGroup "FILA 5" [color: #64748B] {
   computador_contexto_escritorio
 }
 
-// -----------------------------------------------------------------------------
-// FILA 1
-// -----------------------------------------------------------------------------
-
 Table modalidades_aplicacion {
   codigoModalidad varchar [pk, note: 'MODO_ARQUITECTO | MODO_JUEGO | MODO_COMPUTADOR']
   nombreModalidad varchar
@@ -69,10 +46,6 @@ Table modalidades_aplicacion {
 
   Note: 'Tabla raíz. Desde aquí se reparte el sistema en los tres modos.'
 }
-
-// -----------------------------------------------------------------------------
-// FILA 2
-// -----------------------------------------------------------------------------
 
 Table MODO_ARQUITECTO {
   codigoModalidad varchar [pk, ref: > modalidades_aplicacion.codigoModalidad]
@@ -113,10 +86,6 @@ Table MODO_COMPUTADOR {
   Note: 'El guante y la visión controlan el computador.'
 }
 
-// -----------------------------------------------------------------------------
-// FILA 3
-// -----------------------------------------------------------------------------
-
 Table arquitecto_contextos {
   codigoContexto varchar [pk]
   codigoModalidad varchar [not null, ref: > MODO_ARQUITECTO.codigoModalidad]
@@ -153,10 +122,6 @@ Table computador_mapeo_mano {
   fechaRegistro datetime
 }
 
-// -----------------------------------------------------------------------------
-// FILA 4
-// -----------------------------------------------------------------------------
-
 Table arquitecto_escenas {
   codigoEscena varchar [pk]
   codigoContexto varchar [not null, ref: > arquitecto_contextos.codigoContexto]
@@ -191,10 +156,6 @@ Table computador_acciones_sistema {
   resultadoEsperado varchar
   fechaRegistro datetime
 }
-
-// -----------------------------------------------------------------------------
-// FILA 5
-// -----------------------------------------------------------------------------
 
 Table arquitecto_assets {
   codigoAsset varchar [pk]

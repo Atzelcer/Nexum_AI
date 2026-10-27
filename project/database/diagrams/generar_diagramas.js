@@ -1,8 +1,3 @@
-/**
- * Genera dos diagramas SVG de NEXUM AI sin dependencias externas.
- * Los SVG pueden convertirse a PNG con:
- * npx sharp-cli -i archivo.svg -o archivo.png
- */
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -209,8 +204,6 @@ function buildRelational() {
         170,
       );
     });
-    const sesX = x + 385;
-    const sesY = 850;
     s += edge(x + 192, 775, x + 552, 850);
     s += edge(x + 552, 775, x + 552, 850);
     s += edge(x + 552, 1020, x + 192, 1095);

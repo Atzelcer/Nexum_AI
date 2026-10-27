@@ -1,50 +1,33 @@
-"""
-Manuel Assist Lab Bridge
-
-Responsabilidades:
-- Recibir UDP desde ESP32 en puerto 5005.
-- Responder handshake hacia ESP32 en puerto 5006.
-- Enviar comandos UDP al ESP32: calibrar, ping.
-- Exponer WebSocket local ws://localhost:8765 para el laboratorio web.
-- Procesar modos letras/numeros/cursor y seleccion de teclas.
-"""
-
-import base64
-import hashlib
 import json
 import sys
 import socket
 import struct
 import threading
 import time
+from pathlib import Path
 
 try:
-    from pynput.keyboard import Controller, Key
+    from pynput.keyboard import Controller
 except Exception:
     Controller = None
-    Key = None
-
-try:
-    from pynput.mouse import Button, Controller as MouseController
-except Exception:
-    Button = None
-    MouseController = None
 
 
-UDP_IP = "0.0.0.0"
-PC_PORT = 5005
 ESP_PORT = 5006
-WS_HOST = "127.0.0.1"
-WS_PORT = 8765
 
-CONFIRM_DELAY = 2.0
+CONFIRM_DELAY = 2.5
 VISUAL_ACTIVE_SECONDS = 0.8
-REST_ARM_SECONDS = 0.55
-MODE_WINDOW_SECONDS = 0.35
 MODE_CHANGE_MIN_ACTIVE = 4
+CHORD_WINDOW_SECONDS = 0.6
+WHEEL_DWELL_SECONDS = 2.0
+WHEEL_ARM_TIMEOUT = 2.5
+MAX_GLOVES = 1
+GLOVE_TIMEOUT_SECONDS = 12.0
+GLOVE_TIMEOUT_CALIBRATING = 90.0
+GLOVE_GONE_SYS = ("DESCONECTANDO", "CONEXION_CERRADA", "PC_TIMEOUT", "WIFI_PERDIDO")
 
 DEDOS_ORDEN = ["menique", "anular", "medio", "indice", "pulgar"]
 MODES = ["letters", "numbers", "cursor"]
+HANDS = ("r", "l")
 
 LETTER_MAP = {
     "pulgar": ["a", "b", "c", "d", "e", "f"],
@@ -62,19 +45,7 @@ NUMBER_MAP = {
     "menique": ["9", "0", ".", ";"],
 }
 
-CURSOR_MAP = {
-    "pulgar": ["windows"],
-    "indice": ["cursor_gyro"],
-    "medio": ["clear"],
-    "anular": ["left_click"],
-    "menique": ["right_click"],
-}
-
-MOUSE_DEADZONE = 0.6
-MOUSE_GAIN = 2.2
-MOUSE_TILT_GAIN = 1.35
-MOUSE_MAX_STEP = 180
-CURSOR_REST_SETTLE_SECONDS = 0.28
+send_udp = None
 
 
 class WebSocketHub:
@@ -110,26 +81,30 @@ class LabState:
         self.lock = threading.Lock()
         self.mode = "letters"
         self.enabled = False
-        self.curr_states = {d: "reposo" for d in DEDOS_ORDEN}
-        self.prev_states = {d: "reposo" for d in DEDOS_ORDEN}
         self.pending_finger = None
         self.pending_count = 0
-        self.pending_started_at = 0.0
+        self.pending_hand = "r"
         self.visual_release_at = 0.0
         self.confirm_at = 0.0
         self.visual_released = True
-        self.all_reposo_since = time.time()
-        self.mode_window_until = 0.0
-        self.mode_window_seen = set()
         self.locked_finger = None
         self.waiting_for_rest = False
         self.esp32_ip = None
-        self.pc_ip_local = None
+        self.gloves = {}
+        self.states_by_hand = {h: {d: "reposo" for d in DEDOS_ORDEN} for h in HANDS}
+        self.prev_by_hand = {h: {d: "reposo" for d in DEDOS_ORDEN} for h in HANDS}
+        self.curr_states = self.states_by_hand["r"]
+        self.prev_states = self.prev_by_hand["r"]
         self.keyboard = Controller() if Controller else None
-        self.mouse = MouseController() if MouseController else None
-        self.cursor_gyro_enabled = False
-        self.cursor_rest_candidate_at = 0.0
-        self.last_imu_at = 0.0
+        self.wheel_open = False
+        self.wheel_hover = "letters"
+        self.wheel_armed = False
+        self.wheel_opened_at = 0.0
+        self.wheel_confirm_at = 0.0
+        self.wheel_rises = []
+        self.wheel_hover_before = None
+        self.chord_rises = {h: [] for h in HANDS}
+        self.chord_snapshot = None
 
     def publish(self, payload):
         self.hub.broadcast(payload)
@@ -138,335 +113,532 @@ class LabState:
         with self.lock:
             self.enabled = enabled
             self.reset_selection()
+            if not enabled and self.wheel_open:
+                self.close_wheel("cancel")
+            if enabled:
+                self.waiting_for_rest = not self.all_resting()
         self.publish({"type": "enabled", "enabled": enabled})
 
     def reset_selection(self):
         self.pending_finger = None
         self.pending_count = 0
-        self.pending_started_at = 0.0
+        self.pending_hand = "r"
         self.visual_release_at = 0.0
         self.confirm_at = 0.0
         self.visual_released = True
         self.locked_finger = None
         self.waiting_for_rest = False
-        self.cursor_gyro_enabled = False
-        self.cursor_rest_candidate_at = 0.0
-        self.mode_window_until = 0.0
-        self.mode_window_seen.clear()
 
     def forget_connection(self):
         with self.lock:
             self.enabled = False
             self.reset_selection()
+            if self.wheel_open:
+                self.close_wheel("cancel")
             self.esp32_ip = None
-            self.pc_ip_local = None
-            for d in DEDOS_ORDEN:
-                self.curr_states[d] = "reposo"
-                self.prev_states[d] = "reposo"
+            self.gloves = {}
+            for hand in HANDS:
+                for d in DEDOS_ORDEN:
+                    self.states_by_hand[hand][d] = "reposo"
+                    self.prev_by_hand[hand][d] = "reposo"
+            self.curr_states = self.states_by_hand["r"]
+            self.prev_states = self.prev_by_hand["r"]
         self.publish({"type": "enabled", "enabled": False})
         self.publish({"type": "connected", "esp32_ip": None, "pc_ip": None})
+        self.publish(gloves_payload("cleared"))
 
-    def cycle_mode(self):
-        idx = MODES.index(self.mode)
-        self.mode = MODES[(idx + 1) % len(MODES)]
+    def reset_session(self):
+        with self.lock:
+            if self.wheel_open:
+                self.close_wheel("cancel")
+            self.reset_selection()
+            self.mode = "letters"
+            for hand in HANDS:
+                for finger in DEDOS_ORDEN:
+                    self.states_by_hand[hand][finger] = "reposo"
+                    self.prev_by_hand[hand][finger] = "reposo"
+        self.publish({"type": "reset"})
+        self.publish({"type": "mode", "mode": self.mode})
+
+    def wheel_payload(self, phase, **extra):
+        return {
+            "type": "mode_wheel",
+            "phase": phase,
+            "hover": self.wheel_hover,
+            "current": self.mode,
+            "armed": self.wheel_armed,
+            "dwell_ms": int(WHEEL_DWELL_SECONDS * 1000),
+            **extra,
+        }
+
+    def open_mode_wheel(self, now=None):
+        now = now or time.time()
+        self.reset_selection()
+        idx = MODES.index(self.mode) if self.mode in MODES else -1
+        self.wheel_open = True
+        self.wheel_hover = MODES[(idx + 1) % len(MODES)]
+        self.wheel_armed = self.all_resting()
+        self.wheel_opened_at = now
+        self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
+        self.wheel_rises = []
+        self.wheel_hover_before = None
+        self.publish(self.wheel_payload("open"))
+
+    def close_wheel(self, phase=None):
+        self.wheel_open = False
+        self.wheel_rises = []
+        self.wheel_hover_before = None
+        for hand in HANDS:
+            self.chord_rises[hand] = []
+        if phase:
+            self.publish(self.wheel_payload(phase))
+
+    def wheel_arm(self, now):
+        self.wheel_armed = True
+        self.wheel_rises = []
+        self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
+        self.publish(self.wheel_payload("armed"))
+
+    def wheel_advance(self, now):
+        idx = MODES.index(self.wheel_hover) if self.wheel_hover in MODES else -1
+        self.wheel_hover = MODES[(idx + 1) % len(MODES)]
+        self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
+        self.publish(self.wheel_payload("hover"))
+
+    def wheel_confirm(self):
+        chosen = self.wheel_hover
+        self.close_wheel()
+        self.publish(self.wheel_payload("confirm", mode=chosen))
+        self.apply_mode(chosen)
+
+    def handle_wheel_finger(self, finger, status, slot, now, glove_ip=None):
+        prev = self.prev_states.get(finger, "reposo")
+        self.curr_states[finger] = status
+        self.prev_states[finger] = status
+        rising = prev == "reposo" and status == "activo"
+        self.publish({"type": "finger", "finger": finger, "status": status, "hand": slot, "glove_ip": glove_ip})
+        if not self.wheel_armed:
+            if self.all_resting():
+                self.wheel_arm(now)
+            return
+        if not rising:
+            return
+        self.wheel_rises = [(f, t) for f, t in self.wheel_rises if now - t <= CHORD_WINDOW_SECONDS]
+        if not self.wheel_rises:
+            self.wheel_hover_before = self.wheel_hover
+            self.wheel_rises.append((finger, now))
+            self.wheel_advance(now)
+            return
+        self.wheel_rises.append((finger, now))
+        if len({f for f, _ in self.wheel_rises}) >= MODE_CHANGE_MIN_ACTIVE:
+            if self.wheel_hover_before:
+                self.wheel_hover = self.wheel_hover_before
+            self.wheel_confirm()
+
+    def wheel_tick(self, now):
+        if not self.wheel_armed:
+            if now - self.wheel_opened_at >= WHEEL_ARM_TIMEOUT:
+                self.wheel_arm(now)
+            return
+        if now >= self.wheel_confirm_at:
+            self.wheel_confirm()
+
+    def apply_mode(self, mode):
+        self.mode = mode if mode in MODES else "letters"
         self.reset_selection()
         self.waiting_for_rest = not self.all_resting()
-        for finger in DEDOS_ORDEN:
-            self.publish({"type": "finger", "finger": finger, "status": "reposo"})
-        self.publish({"type": "mode", "mode": self.mode})
+        for hand in HANDS:
+            for finger in DEDOS_ORDEN:
+                self.states_by_hand[hand][finger] = "reposo"
+                self.prev_by_hand[hand][finger] = "reposo"
+                self.publish({"type": "finger", "finger": finger, "status": "reposo", "hand": hand})
+        self.publish({"type": "mode", "mode": self.mode, "source": "gesture"})
         try:
             send_mode_to_esp()
         except Exception:
             pass
 
-    def active_count(self):
-        return sum(1 for d in DEDOS_ORDEN if self.curr_states[d] == "activo")
+    def detect_chord(self, finger, slot, rising, now):
+        if not rising:
+            return False
+        rises = [(f, t) for f, t in self.chord_rises[slot] if now - t <= CHORD_WINDOW_SECONDS]
+        if not rises:
+            self.chord_snapshot = (
+                (self.pending_finger, self.pending_count, self.pending_hand)
+                if self.pending_finger and self.mode != "cursor" else None
+            )
+        rises.append((finger, now))
+        self.chord_rises[slot] = rises
+        if len({f for f, _ in rises}) < MODE_CHANGE_MIN_ACTIVE:
+            return False
 
-    def all_resting(self):
-        return all(self.curr_states[d] == "reposo" for d in DEDOS_ORDEN)
+        snapshot = self.chord_snapshot
+        self.chord_snapshot = None
+        self.chord_rises[slot] = []
+        if snapshot:
+            self.pending_finger, self.pending_count, self.pending_hand = snapshot
+            self.emit_key(self.pending_key())
+        self.curr_states[finger] = "activo"
+        self.prev_states[finger] = "activo"
+        self.publish({"type": "finger", "finger": finger, "status": "activo", "hand": slot})
+        self.open_mode_wheel(now)
+        return True
 
-    def map_for_mode(self):
-        if self.mode == "numbers":
-            return NUMBER_MAP
-        if self.mode == "cursor":
-            return CURSOR_MAP
-        return LETTER_MAP
+    def all_resting(self, hand=None):
+        if hand in self.states_by_hand:
+            return all(self.states_by_hand[hand][d] == "reposo" for d in DEDOS_ORDEN)
+        return all(
+            self.states_by_hand[h][d] == "reposo"
+            for h in HANDS
+            for d in DEDOS_ORDEN
+        )
 
     def pending_key(self):
         if not self.pending_finger or self.pending_count <= 0:
             return None
-        options = self.map_for_mode().get(self.pending_finger, [])
+        key_map = NUMBER_MAP if self.mode == "numbers" else LETTER_MAP
+        options = key_map.get(self.pending_finger, [])
         if not options:
             return None
         return options[(self.pending_count - 1) % len(options)]
-
-    def press_windows_key(self):
-        if sys.platform.startswith("win"):
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                vk_lwin = 0x5B
-                key_up = 0x0002
-                user32.keybd_event(vk_lwin, 0, 0, 0)
-                user32.keybd_event(vk_lwin, 0, key_up, 0)
-                return
-            except Exception as exc:
-                self.publish({"type": "error", "message": f"windows: {exc}"})
-
-        win_key = getattr(Key, "cmd", None) or getattr(Key, "cmd_l", None) if Key else None
-        if self.keyboard and win_key:
-            self.keyboard.press(win_key)
-            self.keyboard.release(win_key)
-
-    def clear_text_target(self):
-        if not self.keyboard or not Key:
-            return
-        ctrl_key = getattr(Key, "ctrl", None) or getattr(Key, "ctrl_l", None)
-        if not ctrl_key:
-            return
-        self.keyboard.press(ctrl_key)
-        self.keyboard.press("a")
-        self.keyboard.release("a")
-        self.keyboard.release(ctrl_key)
-        self.keyboard.press(Key.backspace)
-        self.keyboard.release(Key.backspace)
 
     def emit_key(self, key):
         if not key:
             return
         self.publish({"type": "confirm", "key": key, "mode": self.mode})
+        if not self.keyboard:
+            return
         try:
-            if self.mode == "cursor":
-                special = {} if not Key else {
-                    "space": Key.space,
-                    "enter": Key.enter,
-                    "right": Key.right,
-                    "left": Key.left,
-                    "up": Key.up,
-                    "down": Key.down,
-                    "backspace": Key.backspace,
-                    "tab": Key.tab,
-                    "escape": Key.esc,
-                }
-                if key == "mode":
-                    self.cycle_mode()
-                elif key == "windows":
-                    self.press_windows_key()
-                elif key == "clear":
-                    self.clear_text_target()
-                elif key in special:
-                    if self.keyboard:
-                        self.keyboard.press(special[key])
-                        self.keyboard.release(special[key])
-                elif key == "left_click" and self.mouse and Button:
-                    self.mouse.click(Button.left, 1)
-                elif key == "right_click" and self.mouse and Button:
-                    self.mouse.click(Button.right, 1)
-            else:
-                if not self.keyboard:
-                    return
-                self.keyboard.type(key)
+            self.keyboard.type(key)
         except Exception as exc:
             self.publish({"type": "error", "message": f"teclado: {exc}"})
 
     def confirm(self):
         key = self.pending_key()
         finger = self.pending_finger
+        hand = self.pending_hand
+        self.chord_snapshot = None
         self.emit_key(key)
         self.reset_selection()
         if finger:
-            self.publish({"type": "finger", "finger": finger, "status": "reposo"})
-        for d in DEDOS_ORDEN:
-            self.curr_states[d] = "reposo"
-            self.prev_states[d] = "reposo"
-        self.all_reposo_since = time.time()
+            self.publish({"type": "finger", "finger": finger, "status": "reposo", "hand": hand})
+        for h in HANDS:
+            for d in DEDOS_ORDEN:
+                self.states_by_hand[h][d] = "reposo"
+                self.prev_by_hand[h][d] = "reposo"
 
-    def begin_selection(self, finger, now=None):
+    def begin_selection(self, finger, now=None, hand="r"):
         now = now or time.time()
         self.locked_finger = finger
+        self.pending_hand = hand if hand in HANDS else "r"
         if self.pending_finger == finger:
             self.pending_count += 1
         else:
             self.pending_finger = finger
             self.pending_count = 1
-        self.pending_started_at = now
         self.visual_release_at = now + VISUAL_ACTIVE_SECONDS
         self.confirm_at = now + CONFIRM_DELAY
         self.visual_released = False
-        self.publish({"type": "finger", "finger": finger, "status": "activo"})
+        self.publish({"type": "finger", "finger": finger, "status": "activo", "hand": self.pending_hand})
         self.publish({
             "type": "preview",
             "finger": finger,
+            "hand": self.pending_hand,
             "count": self.pending_count,
             "key": self.pending_key(),
             "mode": self.mode,
+            "confirm_ms": int(CONFIRM_DELAY * 1000),
         })
 
-    def resolve_mode_window_if_expired(self, now):
-        if self.mode_window_until == 0.0 or now <= self.mode_window_until:
-            return False
+    def _bind_hand(self, hand):
+        slot = hand if hand in HANDS else "r"
+        self.curr_states = self.states_by_hand[slot]
+        self.prev_states = self.prev_by_hand[slot]
+        return slot
 
-        seen = set(self.mode_window_seen)
-        self.mode_window_until = 0.0
-        self.mode_window_seen.clear()
-
-        if len(seen) >= MODE_CHANGE_MIN_ACTIVE:
-            self.cycle_mode()
-            return True
-
-        if len(seen) == 1:
-            self.begin_selection(next(iter(seen)), now)
-            return True
-
-        return False
-
-    def handle_finger(self, finger, status):
+    def handle_finger(self, finger, status, hand="r", glove_ip=None):
         now = time.time()
         with self.lock:
+            slot = self._bind_hand(hand)
             if finger not in self.curr_states or status not in ("activo", "reposo"):
                 return
+            if glove_ip and glove_ip in self.gloves:
+                self.gloves[glove_ip]["last_seen"] = now
 
-            if self.mode == "cursor" and self.cursor_gyro_enabled and finger != "indice":
+            if self.wheel_open:
+                self.handle_wheel_finger(finger, status, slot, now, glove_ip)
+                return
+
+            was_rest = self.prev_states.get(finger, "reposo") == "reposo"
+            if self.detect_chord(finger, slot, was_rest and status == "activo", now):
+                return
+
+            finger_msg = {"type": "finger", "finger": finger, "status": status, "hand": slot, "glove_ip": glove_ip}
+
+            if self.mode == "cursor":
+                self.curr_states[finger] = status
+                self.prev_states[finger] = status
+                self.publish(finger_msg)
                 return
 
             if self.pending_finger and now >= self.confirm_at:
                 self.confirm()
+                self._bind_hand(slot)
 
             prev = self.prev_states.get(finger, "reposo")
             self.curr_states[finger] = status
             rising = prev == "reposo" and status == "activo"
             self.prev_states[finger] = status
 
-            if self.mode == "cursor" and finger == "indice":
-                if status == "activo":
-                    self.reset_selection()
-                    self.cursor_gyro_enabled = True
-                    self.cursor_rest_candidate_at = 0.0
-                    self.publish({"type": "finger", "finger": finger, "status": "activo"})
-                else:
-                    self.cursor_rest_candidate_at = now
-                return
-
             if self.waiting_for_rest:
                 if self.all_resting():
                     self.waiting_for_rest = False
-                    self.all_reposo_since = now
                     self.locked_finger = None
+                self.publish(finger_msg)
                 return
 
             if self.pending_finger:
-                if self.mode_window_until > 0.0 and now <= self.mode_window_until and rising:
-                    self.mode_window_seen.add(finger)
-                    if len(self.mode_window_seen) >= MODE_CHANGE_MIN_ACTIVE:
-                        self.cycle_mode()
-                        return
                 if rising and finger == self.pending_finger:
-                    self.begin_selection(finger, now)
+                    self.begin_selection(finger, now, hand=slot)
+                else:
+                    self.publish(finger_msg)
                 return
 
-            if self.all_resting():
-                self.all_reposo_since = now
+            if self.all_resting(slot) and self.all_resting():
                 self.locked_finger = None
-                self.publish({"type": "finger", "finger": finger, "status": status})
+                self.publish(finger_msg)
                 return
 
-            if not self.enabled:
-                self.publish({"type": "finger", "finger": finger, "status": status})
-                return
-
-            armed_for_mode = now - self.all_reposo_since >= REST_ARM_SECONDS
-            if rising and armed_for_mode:
-                self.mode_window_until = now + MODE_WINDOW_SECONDS
-                self.mode_window_seen = {finger}
-
-            if self.locked_finger and finger != self.locked_finger:
+            if not self.enabled or (self.locked_finger and finger != self.locked_finger):
+                self.publish(finger_msg)
                 return
 
             if rising:
-                self.begin_selection(finger, now)
+                self.begin_selection(finger, now, hand=slot)
+            else:
+                self.publish(finger_msg)
 
     def tick(self):
         with self.lock:
+            now = time.time()
+            if self.wheel_open:
+                self.wheel_tick(now)
+                return
             if not self.enabled:
                 return
-            now = time.time()
             if self.waiting_for_rest:
                 if self.all_resting():
                     self.waiting_for_rest = False
-                    self.all_reposo_since = now
                 return
-            if self.pending_finger:
-                if self.mode_window_until > 0.0 and now > self.mode_window_until:
-                    self.mode_window_until = 0.0
-                    self.mode_window_seen.clear()
-                if not self.visual_released and now >= self.visual_release_at:
-                    self.publish({"type": "finger", "finger": self.pending_finger, "status": "reposo"})
-                    self.visual_released = True
-                if now >= self.confirm_at:
-                    self.confirm()
+            if self.mode == "cursor" or not self.pending_finger:
                 return
-            self.resolve_mode_window_if_expired(now)
+            if not self.visual_released and now >= self.visual_release_at:
+                self.publish({
+                    "type": "finger",
+                    "finger": self.pending_finger,
+                    "status": "reposo",
+                    "hand": self.pending_hand,
+                })
+                self.visual_released = True
+            if now >= self.confirm_at:
+                self.confirm()
 
-            if self.cursor_gyro_enabled and self.cursor_rest_candidate_at:
-                if now - self.cursor_rest_candidate_at >= CURSOR_REST_SETTLE_SECONDS:
-                    self.cursor_gyro_enabled = False
-                    self.cursor_rest_candidate_at = 0.0
-                    self.publish({"type": "finger", "finger": "indice", "status": "reposo"})
-
-    def handle_imu(self, finger, angle_x, angle_y, gyro_x, gyro_y, status):
-        if not self.enabled or self.mode != "cursor" or finger != "indice":
-            return
-        if status == "activo":
-            self.cursor_gyro_enabled = True
-            self.cursor_rest_candidate_at = 0.0
-        if not self.cursor_gyro_enabled or not self.mouse:
-            return
-
-        raw_dx = (gyro_y * MOUSE_GAIN) + (angle_y * MOUSE_TILT_GAIN)
-        raw_dy = (-gyro_x * MOUSE_GAIN) - (angle_x * MOUSE_TILT_GAIN)
-        movement = max(abs(raw_dx), abs(raw_dy))
-        now = time.time()
-
-        if status == "reposo":
-            if movement < MOUSE_DEADZONE:
-                if self.cursor_rest_candidate_at == 0.0:
-                    self.cursor_rest_candidate_at = now
-                if now - self.cursor_rest_candidate_at >= CURSOR_REST_SETTLE_SECONDS:
-                    self.cursor_gyro_enabled = False
-                    self.cursor_rest_candidate_at = 0.0
-                    self.publish({"type": "finger", "finger": "indice", "status": "reposo"})
-                    return
-            else:
-                self.cursor_rest_candidate_at = 0.0
-
-        if now - self.last_imu_at < 0.006:
-            return
-        self.last_imu_at = now
-
-        dx = 0.0 if abs(raw_dx) < MOUSE_DEADZONE else raw_dx
-        dy = 0.0 if abs(raw_dy) < MOUSE_DEADZONE else raw_dy
-        dx = max(-MOUSE_MAX_STEP, min(MOUSE_MAX_STEP, dx))
-        dy = max(-MOUSE_MAX_STEP, min(MOUSE_MAX_STEP, dy))
-        if abs(dx) < 0.5 and abs(dy) < 0.5:
+    def handle_vision_cursor(self, msg):
+        if self.mode != "cursor":
             return
 
         try:
-            self.mouse.move(int(dx), int(dy))
-            self.publish({
-                "type": "cursor",
-                "finger": finger,
-                "dx": int(dx),
-                "dy": int(dy),
-                "angle_x": round(angle_x, 2),
-                "angle_y": round(angle_y, 2),
-            })
+            scripts_dir = str(Path(__file__).resolve().parents[2] / "scripts")
+            if scripts_dir not in sys.path:
+                sys.path.insert(0, scripts_dir)
+            import nexum_input_control
+
+            result = nexum_input_control.apply_vision_cursor(msg)
+            kind = msg.get("kind") or msg.get("event")
+            if kind != "move":
+                print(f"[VISION] {kind} -> {result}", flush=True)
+            if result.get("ok"):
+                if kind == "move":
+                    self.publish({
+                        "type": "cursor",
+                        "source": "vision",
+                        "x": result.get("x"),
+                        "y": result.get("y"),
+                    })
+                elif kind == "click":
+                    self.publish({
+                        "type": "confirm",
+                        "key": f"{result.get('button')}_click",
+                        "mode": "cursor",
+                        "source": "vision",
+                    })
+                elif kind == "key":
+                    self.publish({
+                        "type": "confirm",
+                        "key": result.get("key"),
+                        "mode": "cursor",
+                        "source": "vision",
+                    })
+            else:
+                self.publish({"type": "error", "message": f"vision_cursor: {result.get('error')}"})
         except Exception as exc:
-            self.publish({"type": "error", "message": f"mouse: {exc}"})
+            self.publish({"type": "error", "message": f"vision_cursor: {exc}"})
 
 
 hub = WebSocketHub()
 state = LabState(hub)
-udp_sock = None
+
+
+def normalize_hand(value):
+    raw = str(value or "").strip().lower()
+    if raw in ("l", "left", "izq", "izquierda"):
+        return "l"
+    if raw in ("r", "right", "der", "derecha"):
+        return "r"
+    return None
+
+
+def gloves_payload(event="update"):
+    gloves = []
+    for ip, info in state.gloves.items():
+        gloves.append({
+            "ip": ip,
+            "hand": info.get("hand") or "r",
+            "cal_percent": int(info.get("cal_percent") or 0),
+            "last_sys": info.get("last_sys"),
+        })
+    gloves.sort(key=lambda item: 0 if item["hand"] == "r" else 1)
+    return {
+        "type": "gloves",
+        "event": event,
+        "count": len(gloves),
+        "gloves": gloves,
+        "esp32_ip": state.esp32_ip,
+    }
+
+
+def assigned_hands():
+    return {info.get("hand") for info in state.gloves.values() if info.get("hand") in HANDS}
+
+
+def next_free_hand(hint=None):
+    used = assigned_hands()
+    hinted = normalize_hand(hint)
+    if hinted and hinted not in used:
+        return hinted
+    if "r" not in used:
+        return "r"
+    return "l"
+
+
+def primary_glove_ip():
+    for ip, info in state.gloves.items():
+        if info.get("hand") == "r":
+            return ip
+    if state.gloves:
+        return next(iter(state.gloves))
+    return state.esp32_ip
+
+
+def glove_ips():
+    ips = list(state.gloves.keys())
+    if ips:
+        return ips
+    if state.esp32_ip:
+        return [state.esp32_ip]
+    return []
+
+
+def register_glove(ip, hand_hint=None, event="detected"):
+    if not ip or ip.startswith("127."):
+        return None
+    created = ip not in state.gloves
+    if created and len(state.gloves) >= MAX_GLOVES:
+        old_ips = ", ".join(state.gloves.keys())
+        print(f"[GLOVE] guante reconectado: {old_ips} -> {ip}", flush=True)
+        state.gloves.clear()
+    info = state.gloves.get(ip) or {"ip": ip, "hand": None, "cal_percent": 0, "last_sys": None}
+    if created or not info.get("hand"):
+        info["hand"] = next_free_hand(hand_hint)
+    elif normalize_hand(hand_hint) and normalize_hand(hand_hint) not in (assigned_hands() - {info.get("hand")}):
+        info["hand"] = normalize_hand(hand_hint)
+    info["last_seen"] = time.time()
+    state.gloves[ip] = info
+    state.esp32_ip = primary_glove_ip()
+    if created:
+        print(f"[GLOVE] guante enlazado: {ip}", flush=True)
+        state.publish(gloves_payload(event))
+    return info
+
+
+def glove_alive(info, now=None):
+    now = now or time.time()
+    limit = GLOVE_TIMEOUT_CALIBRATING if info.get("calibrating") else GLOVE_TIMEOUT_SECONDS
+    return now - float(info.get("last_seen") or 0) <= limit
+
+
+def foreign_glove(ip, now=None):
+    if not ip or ip.startswith("127.") or ip in state.gloves:
+        return False
+    return any(glove_alive(info, now) for info in state.gloves.values())
+
+
+_foreign_noted = {}
+
+
+def note_foreign(ip, msg):
+    now = time.time()
+    if now - _foreign_noted.get(ip, 0) < 15:
+        return
+    _foreign_noted[ip] = now
+    active = ", ".join(state.gloves)
+    print(f"[GLOVE] ignorado otro ESP32 {ip} ({msg[:24]}) - activo: {active}", flush=True)
+    state.publish({
+        "type": "system",
+        "message": f"Otro ESP32 ({ip}) intenta emparejarse; se ignora mientras {active} responda. Apagalo si no lo usas.",
+    })
+
+
+def drop_glove(ip, reason="perdido"):
+    if not ip or ip not in state.gloves:
+        return False
+    state.gloves.pop(ip, None)
+    print(f"[GLOVE] guante {reason}: {ip}", flush=True)
+    if not state.gloves:
+        state.set_enabled(False)
+        state.publish({"type": "connected", "esp32_ip": None, "pc_ip": None, "reason": reason})
+    state.publish(gloves_payload(reason))
+    return True
+
+
+def note_glove_sys(ip, system_msg):
+    if not ip:
+        return True
+    if system_msg in GLOVE_GONE_SYS:
+        drop_glove(ip, "desconectado")
+        return False
+    register_glove(ip)
+    info = state.gloves.get(ip)
+    if not info:
+        return True
+    info["last_sys"] = system_msg
+    if system_msg in ("CALIBRACION_SOLICITADA", "CALIBRANDO"):
+        info["calibrating"] = True
+        info["cal_percent"] = 0
+    elif system_msg in ("CALIBRACION_OK", "ESTADO_CALIBRADO"):
+        info["calibrating"] = False
+        info["cal_percent"] = 100
+    elif system_msg == "ESTADO_SIN_CALIBRAR":
+        info["calibrating"] = False
+        info["cal_percent"] = 0
+    return True
+
+
+def hand_for_ip(ip):
+    info = state.gloves.get(ip) if ip else None
+    if info and info.get("hand") in HANDS:
+        return info["hand"]
+    return "r"
 
 
 def obtener_ip_local_hacia(destino_ip):
@@ -478,81 +650,10 @@ def obtener_ip_local_hacia(destino_ip):
         s.close()
 
 
-def send_udp(msg):
-    if not state.esp32_ip:
-        state.publish({"type": "error", "message": "ESP32 no conectado"})
-        return
-    udp_sock.sendto(msg.encode("utf-8"), (state.esp32_ip, ESP_PORT))
-
-
 def send_mode_to_esp():
-    if not state.esp32_ip:
+    if not glove_ips():
         return
     send_udp(f"CMD:MODE,{state.mode}")
-
-
-def parse_udp(msg):
-    msg = msg.strip()
-    if not msg:
-        return
-    if msg.startswith("MA_HELLO,"):
-        ip = msg.split(",", 1)[1].strip()
-        state.esp32_ip = ip
-        state.pc_ip_local = obtener_ip_local_hacia(ip)
-        response = f"MA_PC,{state.pc_ip_local}"
-        udp_sock.sendto(response.encode("utf-8"), (ip, ESP_PORT))
-        state.publish({"type": "connected", "esp32_ip": ip, "pc_ip": state.pc_ip_local})
-        return
-    if msg.startswith("SYS:"):
-        system_msg = msg[4:].strip()
-        if system_msg == "STREAM_ACTIVO":
-            state.set_enabled(True)
-        elif system_msg in ("STREAM_PAUSADO", "ERROR_NO_CALIBRADO", "DESCONECTANDO"):
-            state.set_enabled(False)
-        state.publish({"type": "system", "message": system_msg})
-        return
-    if msg.startswith("CAL:"):
-        body = msg[4:].strip()
-        try:
-            current, total = [int(x) for x in body.split("/", 1)]
-            pct = int((current / max(total, 1)) * 100)
-        except Exception:
-            current, total, pct = 0, 0, 0
-        state.publish({"type": "calibration", "current": current, "total": total, "percent": pct})
-        return
-    if msg.startswith("IMU:"):
-        parts = [part.strip() for part in msg[4:].split(",")]
-        if len(parts) >= 6:
-            try:
-                finger = parts[0].lower()
-                angle_x = float(parts[1])
-                angle_y = float(parts[2])
-                gyro_x = float(parts[3])
-                gyro_y = float(parts[4])
-                status = parts[5].lower()
-                state.handle_imu(finger, angle_x, angle_y, gyro_x, gyro_y, status)
-            except Exception as exc:
-                state.publish({"type": "error", "message": f"imu: {exc}"})
-        return
-    if ":" in msg:
-        finger, status = [part.strip().lower() for part in msg.split(":", 1)]
-        state.handle_finger(finger, status)
-
-
-def udp_loop():
-    global udp_sock
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.bind((UDP_IP, PC_PORT))
-    udp_sock.settimeout(0.05)
-    while True:
-        try:
-            data, _addr = udp_sock.recvfrom(1024)
-            parse_udp(data.decode("utf-8", errors="ignore"))
-        except socket.timeout:
-            pass
-        state.tick()
-        time.sleep(0.005)
 
 
 def ws_send(conn, text):
@@ -584,12 +685,17 @@ def ws_recv(conn):
     return data.decode("utf-8", errors="ignore")
 
 
+vision_owner = None
+
+
 def handle_ws_message(raw):
+    global vision_owner
     try:
         msg = json.loads(raw)
     except Exception:
         return
     action = msg.get("action")
+    print(f"[WS] action={action}", flush=True)
     if action == "start":
         send_udp("CMD:START_STREAM")
         send_mode_to_esp()
@@ -600,72 +706,46 @@ def handle_ws_message(raw):
         send_udp("CMD:DISCONNECT")
         state.forget_connection()
     elif action == "calibrate":
+        if not glove_ips():
+            state.publish({"type": "error", "message": "ESP32 no conectado: no se puede calibrar"})
+            return
         state.publish({"type": "calibration", "current": 0, "total": 5, "percent": 0})
+        state.publish({"type": "system", "message": "Enviando CMD:CALIBRATE"})
         send_udp("CMD:CALIBRATE")
     elif action == "ping":
         send_udp("CMD:PING")
     elif action == "mode":
         mode = msg.get("mode")
         if mode in MODES:
-            state.mode = mode
-            state.reset_selection()
+            with state.lock:
+                if state.wheel_open:
+                    state.close_wheel("cancel")
+                elif mode == state.mode:
+                    return
+                state.mode = mode
+                state.reset_selection()
+                state.waiting_for_rest = not state.all_resting()
             state.publish({"type": "mode", "mode": mode})
             send_mode_to_esp()
-
-
-def ws_client(conn):
-    hub.add(conn)
-    try:
-        ws_send(conn, json.dumps({
-            "type": "hello",
-            "mode": state.mode,
-            "enabled": state.enabled,
-            "esp32_ip": state.esp32_ip,
-        }))
-        while True:
-            raw = ws_recv(conn)
-            if raw is None:
-                break
-            handle_ws_message(raw)
-    finally:
-        hub.remove(conn)
-        conn.close()
-
-
-def websocket_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((WS_HOST, WS_PORT))
-    server.listen(8)
-    while True:
-        conn, _addr = server.accept()
-        request = conn.recv(4096).decode("utf-8", errors="ignore")
-        key = ""
-        for line in request.splitlines():
-            if line.lower().startswith("sec-websocket-key:"):
-                key = line.split(":", 1)[1].strip()
-                break
-        if not key:
-            conn.close()
-            continue
-        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
-        response = (
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
-        )
-        conn.sendall(response.encode("utf-8"))
-        threading.Thread(target=ws_client, args=(conn,), daemon=True).start()
-
-
-def main():
-    print("Manuel Assist Lab Bridge")
-    print(f"UDP ESP32 -> PC: {PC_PORT}")
-    print(f"WebSocket laboratorio: ws://{WS_HOST}:{WS_PORT}")
-    threading.Thread(target=udp_loop, daemon=True).start()
-    websocket_server()
-
-
-if __name__ == "__main__":
-    main()
+            print(f"[MODE] -> {mode}", flush=True)
+    elif action == "reset":
+        state.reset_session()
+        if state.gloves:
+            send_udp("CMD:RESET")
+            send_mode_to_esp()
+    elif action in ("vision_claim", "vision_release"):
+        owner = msg.get("owner")
+        if action == "vision_claim":
+            vision_owner = owner
+        elif owner == vision_owner:
+            vision_owner = None
+        else:
+            return
+        state.publish({"type": "vision_owner", "owner": vision_owner})
+    elif action == "mode_wheel_cancel":
+        with state.lock:
+            if state.wheel_open:
+                state.close_wheel("cancel")
+                state.waiting_for_rest = not state.all_resting()
+    elif action == "vision_cursor":
+        state.handle_vision_cursor(msg)

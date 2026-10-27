@@ -1,13 +1,3 @@
-/**
- * NEXUM AI - Creación completa de la base MongoDB.
- * Modelo v3: 6 colecciones compartidas + 8 por modalidad = 30 colecciones.
- *
- * Ejecución:
- *   mongosh "mongodb://localhost:27017" database/mongodb/nexum_ai_completo.js
- *
- * El script NO inserta datos. Es idempotente: crea la colección o actualiza
- * su validador y después crea/actualiza sus índices.
- */
 
 db = db.getSiblingDB("nexum_ai");
 
@@ -88,9 +78,36 @@ const commonTelemetry = {
 };
 
 const collections = [
-  // -------------------------------------------------------------------------
-  // NÚCLEO COMPARTIDO (6)
-  // -------------------------------------------------------------------------
+  collection(
+    "usuarios",
+    [
+      "codigoUsuario",
+      "nombreUsuario",
+      "correoUsuario",
+      "tipoUsuario",
+      "estadoUsuario",
+      "fechaRegistro",
+    ],
+    {
+      codigoUsuario: S.str,
+      nombreUsuario: S.str,
+      correoUsuario: S.str,
+      tipoUsuario: {
+        ...S.str,
+        enum: ["registrado", "invitado", "sistema"],
+      },
+      estadoUsuario: { ...S.str, enum: ["activo", "inactivo"] },
+      fechaRegistro: S.date,
+      salt: S.str,
+      passwordHash: S.str,
+    },
+    [
+      { key: { codigoUsuario: 1 }, options: { unique: true } },
+      { key: { correoUsuario: 1 }, options: { unique: true } },
+      { key: { nombreUsuario: 1 } },
+      { key: { estadoUsuario: 1 } },
+    ],
+  ),
   collection(
     "catalogo_gestos",
     ["codigoGesto", "nombreGesto", "tipoGesto", "activo", "fechaRegistro"],
@@ -142,6 +159,7 @@ const collections = [
       },
       nombreModalidad: S.str,
       descripcionModalidad: S.str,
+      codigoUsuario: S.nullableStr,
       motorDestino: { ...S.str, enum: ["threejs", "unity", "navegador"] },
       categoriasComando: S.arr,
       gestosPermitidos: S.arr,
@@ -160,6 +178,7 @@ const collections = [
       { key: { codigoModalidad: 1 }, options: { unique: true } },
       { key: { motorDestino: 1 } },
       { key: { estadoModalidad: 1 } },
+      { key: { codigoUsuario: 1 } },
     ],
   ),
   collection(
@@ -275,9 +294,6 @@ const collections = [
     ],
   ),
 
-  // -------------------------------------------------------------------------
-  // MODALIDAD 1: ARQUITECTO TRIDIMENSIONAL / THREE.JS (8)
-  // -------------------------------------------------------------------------
   collection(
     "arquitecto_comandos",
     ["codigoComando", "nombreComando", "tipoComando", "activo", "fechaRegistro"],
@@ -467,9 +483,6 @@ const collections = [
     ],
   ),
 
-  // -------------------------------------------------------------------------
-  // MODALIDAD 2: CONTROL DE VIDEOJUEGO / UNITY (8)
-  // -------------------------------------------------------------------------
   collection(
     "videojuego_comandos",
     ["codigoComando", "nombreComando", "tipoAccion", "activo", "fechaRegistro"],
@@ -652,9 +665,6 @@ const collections = [
     ],
   ),
 
-  // -------------------------------------------------------------------------
-  // MODALIDAD 3: INTERACCIÓN HÍBRIDA / NAVEGADOR (8)
-  // -------------------------------------------------------------------------
   collection(
     "hibrida_comandos",
     ["codigoComando", "nombreComando", "tipoEntrada", "activo", "fechaRegistro"],

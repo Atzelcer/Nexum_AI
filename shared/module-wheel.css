@@ -1,0 +1,493 @@
+.nx-orbit-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 30;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(16, 20, 18, 0.14);
+  background: rgba(244, 247, 243, 0.92);
+  color: #0a6b5f;
+  display: grid;
+  place-items: center;
+  place-content: center;
+  gap: 1px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 36px rgba(10, 14, 12, 0.18);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease, opacity 180ms ease;
+}
+
+.nx-orbit-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  border-color: #0a6b5f;
+}
+
+.nx-orbit-fab.is-open {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nx-orbit-fab-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 72%, #0a6b5f 82%, transparent 92%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 100%);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 100%);
+  animation: nx-orbit-spin 7s linear infinite;
+}
+
+@keyframes nx-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+.nx-orbit-fab strong {
+  position: relative;
+  z-index: 1;
+  font-family: "Syne", "Avenir Next", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.nx-orbit-fab small {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #66706a;
+}
+
+.nx-orbit {
+  --hot: #10b49c;
+  --disk: min(460px, 88vw, 74vh);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  color: #eaf6f0;
+}
+
+.nx-orbit[hidden] {
+  display: none;
+}
+
+.nx-orbit-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--hot) 22%, transparent), transparent 46%),
+    radial-gradient(circle at 50% 46%, rgba(6, 10, 9, 0.5), rgba(4, 7, 6, 0.86) 70%);
+  backdrop-filter: blur(14px) saturate(0.9);
+  transition: background 300ms ease;
+  animation: nx-fade 260ms ease both;
+}
+
+.nx-orbit-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  animation: nx-pop 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes nx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes nx-pop {
+  from { opacity: 0; transform: scale(0.82) rotate(-12deg); }
+  to { opacity: 1; transform: none; }
+}
+
+.nx-orbit-disk {
+  position: relative;
+  width: var(--disk);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: drop-shadow(0 30px 70px rgba(0, 0, 0, 0.5));
+}
+
+.nx-orbit-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nx-orbit-face {
+  stroke: none;
+}
+
+.nx-orbit-ticks {
+  fill: none;
+  stroke: rgba(234, 246, 240, 0.2);
+  stroke-width: 3;
+  stroke-dasharray: 0.6 5.47;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: nx-orbit-spin 80s linear infinite;
+}
+
+.nx-orbit-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.nx-orbit-slice {
+  fill: rgba(255, 255, 255, 0.045);
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 0.6;
+  cursor: pointer;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  transition: fill 180ms ease, stroke 180ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: nx-slice-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i) * 45ms + 80ms);
+}
+
+@keyframes nx-slice-in {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: none; }
+}
+
+.nx-orbit-slice.is-current:not(.is-hot) {
+  fill: color-mix(in srgb, var(--c) 12%, transparent);
+  stroke: color-mix(in srgb, var(--c) 40%, transparent);
+}
+
+.nx-orbit-slice.is-hot {
+  fill: color-mix(in srgb, var(--c) 34%, transparent);
+  stroke: var(--c);
+  stroke-width: 0.9;
+  transform: translate(var(--dx), var(--dy));
+}
+
+.nx-orbit-slice.is-disabled {
+  fill: rgba(255, 255, 255, 0.02);
+  stroke: rgba(255, 255, 255, 0.05);
+  cursor: not-allowed;
+}
+
+.nx-orbit-indicator {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease;
+  pointer-events: none;
+}
+
+.nx-orbit-indicator path {
+  fill: none;
+  stroke: var(--hot);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  transition: stroke 250ms ease;
+}
+
+.nx-orbit.is-hub .nx-orbit-indicator {
+  opacity: 0;
+}
+
+.nx-orbit-cursor {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.nx-orbit-cursor circle {
+  fill: #fff;
+  filter: drop-shadow(0 0 4px var(--hot));
+}
+
+.nx-orbit.has-cursor .nx-orbit-cursor {
+  opacity: 0.9;
+}
+
+.nx-orbit-core-glow {
+  fill: none;
+  stroke: var(--hot);
+  stroke-width: 1.2;
+  opacity: 0.55;
+  transition: stroke 250ms ease;
+  animation: nx-core-pulse 2.4s ease-in-out infinite;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+@keyframes nx-core-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.025); }
+}
+
+.nx-orbit-item {
+  --r: calc(var(--disk) * -0.308);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: calc(var(--disk) * 0.25);
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: rgba(234, 246, 240, 0.78);
+  font: inherit;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  text-align: center;
+  cursor: pointer;
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(var(--r)) rotate(calc(var(--a) * -1));
+  transition: color 180ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+  animation: nx-item-in 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i) * 45ms + 140ms);
+}
+
+@keyframes nx-item-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.nx-orbit-item-icon {
+  width: 22px;
+  height: 22px;
+  color: color-mix(in srgb, var(--c) 70%, #eaf6f0);
+  transition: color 180ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nx-orbit-item strong {
+  font-family: "Syne", "Avenir Next", sans-serif;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.nx-orbit-item small {
+  font-size: 10px;
+  line-height: 1.2;
+  color: rgba(234, 246, 240, 0.48);
+  white-space: nowrap;
+}
+
+.nx-orbit-item.is-current small {
+  color: color-mix(in srgb, var(--c) 80%, #fff);
+}
+
+.nx-orbit-item.is-current small::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--c);
+  vertical-align: 1px;
+  box-shadow: 0 0 6px var(--c);
+}
+
+.nx-orbit-item.is-hot {
+  color: #fff;
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(calc(var(--r) - 6px)) rotate(calc(var(--a) * -1)) scale(1.07);
+}
+
+.nx-orbit-item.is-hot .nx-orbit-item-icon {
+  color: var(--c);
+  transform: translateY(-1px) scale(1.12);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 60%, transparent));
+}
+
+.nx-orbit-item.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.nx-orbit-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  width: calc(var(--disk) * 0.33);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.13), transparent 50%),
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--hot) 26%, transparent), transparent 62%),
+    rgba(8, 12, 10, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.6), 0 0 0 6px rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.nx-orbit-hub:hover,
+.nx-orbit-hub.is-hot {
+  border-color: color-mix(in srgb, var(--hot) 70%, transparent);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.6), 0 0 0 6px color-mix(in srgb, var(--hot) 14%, transparent);
+}
+
+.nx-orbit-hub-eyebrow {
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(234, 246, 240, 0.4);
+}
+
+.nx-orbit-hub-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--hot);
+  transition: color 250ms ease;
+}
+
+.nx-orbit-hub-icon svg {
+  width: 100%;
+  height: 100%;
+  animation: nx-hub-icon 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes nx-hub-icon {
+  from { opacity: 0; transform: scale(0.6) rotate(-20deg); }
+  to { opacity: 1; transform: none; }
+}
+
+.nx-orbit-hub-label {
+  max-width: calc(var(--disk) * 0.26);
+  font-family: "Syne", "Avenir Next", sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #f2fbf7;
+}
+
+.nx-orbit-hub small {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(234, 246, 240, 0.52);
+}
+
+.nx-orbit-tip {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  max-width: min(640px, 92vw);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(234, 246, 240, 0.55);
+  animation: nx-fade 500ms ease 200ms both;
+}
+
+.nx-orbit-tip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nx-orbit-tip kbd {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  border: 1px solid rgba(234, 246, 240, 0.2);
+  border-bottom-width: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 10px/1 "IBM Plex Mono", ui-monospace, monospace;
+  color: rgba(234, 246, 240, 0.85);
+}
+
+.nx-orbit.is-closing .nx-orbit-stage {
+  animation: nx-out 220ms ease both;
+}
+
+.nx-orbit.is-closing .nx-orbit-backdrop {
+  animation: nx-fade-out 220ms ease both;
+}
+
+@keyframes nx-out {
+  to { opacity: 0; transform: scale(0.88) rotate(8deg); }
+}
+
+@keyframes nx-fade-out {
+  to { opacity: 0; }
+}
+
+.scene-host .nx-orbit-fab,
+.nx-orbit-fab.on-dark {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(8, 14, 12, 0.7);
+  color: #8fe0b0;
+}
+
+.scene-host .nx-orbit-fab small,
+.nx-orbit-fab.on-dark small {
+  color: rgba(234, 246, 240, 0.5);
+}
+
+@media (max-width: 640px) {
+  .nx-orbit {
+    --disk: min(360px, 92vw, 70vh);
+  }
+
+  .nx-orbit-fab {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .nx-orbit-item strong {
+    font-size: 11.5px;
+  }
+
+  .nx-orbit-item small,
+  .nx-orbit-hub-eyebrow {
+    display: none;
+  }
+
+  .nx-orbit-hub-label {
+    font-size: 13px;
+  }
+
+  .nx-orbit-tip span:nth-child(2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-orbit *,
+  .nx-orbit-fab-ring {
+    animation: none !important;
+  }
+
+  .nx-orbit-indicator,
+  .nx-orbit-slice,
+  .nx-orbit-item {
+    transition: none;
+  }
+}

@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NEXUM · Emulador web</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #050807;
+        overflow: hidden;
+        font-family: sans-serif;
+        color: #cfe8e2;
+      }
+      #wrap, #game {
+        width: 100%;
+        height: 100%;
+      }
+      #status {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        gap: 8px;
+        padding: 24px;
+        background: #050807;
+        pointer-events: none;
+      }
+      #status[hidden] { display: none; }
+      #status strong { font-size: 18px; letter-spacing: .04em; }
+      #status span { font-size: 13px; opacity: .72; max-width: 420px; }
+    </style>
+  </head>
+  <body>
+    <div id="status">
+      <strong>Preparando ROM…</strong>
+      <span>MAME 2003-Plus · set NeoRageX adaptado</span>
+    </div>
+    <div id="wrap">
+      <div id="game"></div>
+    </div>
+    <script src="./ejs/jszip.min.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const rom = params.get("rom") || "mslug.zip";
+      const roms = new URL("../gameNeogeo/NeoRAGEx 5.2a/ROMs/", location.href);
+      const statusEl = document.querySelector("#status");
+
+      const INPUT = {
+        btn_A: 0,
+        btn_B: 8,
+        btn_C: 9,
+        btn_D: 1,
+        coin: 2,
+        start: 3,
+        arriba: 4,
+        abajo: 5,
+        izquierda: 6,
+        derecha: 7
+      };
+
+      const KEY_INPUT = {
+        s: 0, a: 8, d: 9, f: 1,
+        enter: 3, "1": 3, "5": 2,
+        arrowup: 4, arrowdown: 5, arrowleft: 6, arrowright: 7
+      };
+
+      function setStatus(title, detail, kind = "loading") {
+        if (!statusEl) return;
+        statusEl.hidden = false;
+        statusEl.querySelector("strong").textContent = title;
+        statusEl.querySelector("span").textContent = detail || "";
+        parent.postMessage({ type: "nexum-emu", status: kind, rom, message: title }, location.origin);
+      }
+
+      function hideStatus() {
+        if (statusEl) statusEl.hidden = true;
+      }
+
+      function simulate(button, down) {
+        const emu = window.EJS_emulator;
+        if (!emu?.gameManager?.simulateInput) return false;
+        emu.gameManager.simulateInput(0, button, down ? 1 : 0);
+        return true;
+      }
+
+      function fireKey(type, msg) {
+        const opts = {
+          key: msg.key,
+          code: msg.code,
+          keyCode: msg.keyCode,
+          which: msg.keyCode,
+          bubbles: true,
+          cancelable: true
+        };
+        const ev = new KeyboardEvent(type, opts);
+        window.dispatchEvent(ev);
+        document.dispatchEvent(ev);
+        document.querySelector("canvas")?.dispatchEvent(new KeyboardEvent(type, opts));
+      }
+
+      function applyNexum(msg) {
+        const down = Boolean(msg.down);
+        let button = null;
+        if (msg.gesture && INPUT[msg.gesture] !== undefined) {
+          button = INPUT[msg.gesture];
+        } else if (msg.key) {
+          button = KEY_INPUT[String(msg.key).toLowerCase()];
+        }
+        if (button !== undefined && button !== null) {
+          if (simulate(button, down)) return;
+        }
+        if (msg.key) fireKey(down ? "keydown" : "keyup", msg);
+      }
+
+      function reportState() {
+        const emu = window.EJS_emulator;
+        parent.postMessage({
+          type: "nexum-emu-state",
+          paused: Boolean(emu?.paused),
+          muted: Boolean(emu?.muted)
+        }, location.origin);
+      }
+
+      function applyCommand(cmd) {
+        const emu = window.EJS_emulator;
+        if (!emu?.gameManager) return;
+        if (cmd === "pause") {
+          if (emu.paused) emu.play?.();
+          else emu.pause?.();
+        } else if (cmd === "restart") {
+          emu.gameManager.restart();
+          emu.play?.();
+        } else if (cmd === "mute") {
+          emu.muted = !emu.muted;
+          emu.setVolume?.(emu.muted ? 0 : (emu.volume || 0.5));
+        }
+        reportState();
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== location.origin) return;
+        const msg = event.data;
+        if (msg?.type === "nexum-cmd") {
+          applyCommand(msg.cmd);
+          return;
+        }
+        if (!msg || msg.type !== "nexum-key") return;
+        applyNexum(msg);
+      });
+
+      function renameGameEntry(name) {
+        const base = String(name).split("/").pop();
+        if (/\.rom$/i.test(base)) return base.replace(/\.rom$/i, ".bin");
+        return base;
+      }
+
+      function renameBiosEntry(name) {
+        const base = String(name).split("/").pop().toLowerCase();
+        const map = {
+          "neo-geo.rom": "sp-s2.sp1",
+          "uni-bios.rom": "uni-bios_2_3.rom",
+          "ng-sfix.rom": "sfix.sfx",
+          "ng-sm1.rom": "sm1.sm1",
+          "ng-lo.rom": "000-lo.lo",
+          "sfix.sfix": "sfix.sfx",
+          "sfix.sfx": "sfix.sfx",
+          "sm1.sm1": "sm1.sm1",
+          "000-lo.lo": "000-lo.lo",
+          "sp-s2.sp1": "sp-s2.sp1"
+        };
+        return map[base] || name.split("/").pop();
+      }
+
+      async function zipToBlob(url, rename, extra = []) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`No se pudo leer ${url} (${res.status})`);
+        const zip = await JSZip.loadAsync(await res.arrayBuffer());
+        const out = new JSZip();
+        for (const file of Object.values(zip.files)) {
+          if (file.dir) continue;
+          const data = await file.async("uint8array");
+          const dest = rename(file.name);
+          out.file(dest, data);
+          for (const alias of extra) {
+            if (alias.from === dest || alias.from === file.name.split("/").pop().toLowerCase()) {
+              out.file(alias.to, alias.slice ? data.slice(0, alias.slice) : data);
+            }
+          }
+        }
+        return out.generateAsync({ type: "blob", compression: "STORE" });
+      }
+
+      function watchStartErrors() {
+        const probe = () => {
+          const text = document.body.innerText || "";
+          if (/Error al iniciar el juego|Failed to start game/i.test(text)) {
+            setStatus(
+              "MAME no pudo arrancar este set",
+              "Prueba Metal Slug o NEXUM Arcade 2D. Este dump de NeoRageX no siempre coincide con el nucleo.",
+              "error"
+            );
+            return true;
+          }
+          return false;
+        };
+        const obs = new MutationObserver(() => probe());
+        obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+        window.setInterval(probe, 4000);
+      }
+
+      async function boot() {
+        const preparedRom = new URL(`./web-roms/${rom}`, location.href);
+        const preparedBios = new URL("./web-roms/neogeo.zip", location.href);
+        let gameUrl = preparedRom.href;
+        let biosUrl = preparedBios.href;
+        const localOk = await fetch(preparedRom, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
+        if (!localOk) {
+          const gameSrc = new URL(rom, roms).href;
+          const biosSrc = new URL("neogeo.zip", roms).href;
+          setStatus("Adaptando ROM NeoRageX…", rom);
+          const gameBlob = await zipToBlob(gameSrc, renameGameEntry);
+          setStatus("Preparando BIOS Neo Geo…", "neogeo.zip");
+          const biosBlob = await zipToBlob(biosSrc, renameBiosEntry, [
+            { from: "sm1.sm1", to: "mame.sm1" },
+            { from: "000-lo.lo", to: "mamelo.lo", slice: 65536 },
+            { from: "sfix.sfx", to: "sfix.sfix" },
+            { from: "uni-bios_2_3.rom", to: "uni-bios.rom" }
+          ]);
+          const merged = new JSZip();
+          const gameZip = await JSZip.loadAsync(await gameBlob.arrayBuffer());
+          const biosZip = await JSZip.loadAsync(await biosBlob.arrayBuffer());
+          for (const [name, file] of Object.entries({ ...biosZip.files, ...gameZip.files })) {
+            if (file.dir) continue;
+            merged.file(name, await file.async("uint8array"));
+          }
+          const mergedBlob = await merged.generateAsync({ type: "blob", compression: "STORE" });
+          gameUrl = URL.createObjectURL(new File([mergedBlob], rom, { type: "application/zip" }));
+          biosUrl = URL.createObjectURL(new File([biosBlob], "neogeo.zip", { type: "application/zip" }));
+        }
+
+        window.EJS_player = "#game";
+        window.EJS_core = "mame2003_plus";
+        window.EJS_gameName = rom.replace(/\.zip$/i, "");
+        window.EJS_gameUrl = gameUrl;
+        window.EJS_biosUrl = biosUrl;
+        window.EJS_externalFiles = {
+          "/home/web_user/retroarch/userdata/system/neogeo.zip": biosUrl,
+          "/home/web_user/retroarch/userdata/system/mame2003-plus/neogeo.zip": biosUrl
+        };
+        window.EJS_pathtodata = "./ejs/";
+        window.EJS_color = "#0d8f7d";
+        window.EJS_startOnLoaded = true;
+        window.EJS_threads = typeof SharedArrayBuffer !== "undefined";
+        window.EJS_disableDatabases = true;
+        window.EJS_controlScheme = "arcade";
+        window.EJS_defaultControls = {
+          0: {
+            0: { value: "a", value2: "BUTTON_2" },
+            1: { value: "f", value2: "BUTTON_4" },
+            2: { value: "shift", value2: "SELECT" },
+            3: { value: "enter", value2: "START" },
+            4: { value: "up arrow", value2: "DPAD_UP" },
+            5: { value: "down arrow", value2: "DPAD_DOWN" },
+            6: { value: "left arrow", value2: "DPAD_LEFT" },
+            7: { value: "right arrow", value2: "DPAD_RIGHT" },
+            8: { value: "s", value2: "BUTTON_1" },
+            9: { value: "d", value2: "BUTTON_3" },
+            10: { value: "q", value2: "LEFT_TOP_SHOULDER" },
+            11: { value: "e", value2: "RIGHT_TOP_SHOULDER" },
+            12: { value: "tab", value2: "LEFT_BOTTOM_SHOULDER" },
+            13: { value: "r", value2: "RIGHT_BOTTOM_SHOULDER" },
+            24: { value: "1" },
+            28: { value: "space" }
+          },
+          1: {},
+          2: {},
+          3: {}
+        };
+        window.EJS_Buttons = {
+          playPause: true,
+          restart: true,
+          mute: true,
+          settings: true,
+          fullscreen: true,
+          saveState: false,
+          loadState: false,
+          screenshot: false,
+          gamepad: false,
+          cheat: false,
+          volume: true
+        };
+        window.EJS_defaultOptions = {
+          "mame2003-plus_skip_disclaimer": "enabled",
+          "mame2003-plus_skip_warnings": "enabled",
+          "mame2003-plus_neogeo_bios": "euro",
+          "mame2003-plus_frameskip": "3",
+          shader: "disabled",
+          vsync: "disabled",
+          "ff-ratio": "3",
+          video_smooth: "disabled",
+          "audioLatency": "192",
+          "audioSync": "disabled",
+          rewind: "disabled"
+        };
+        window.EJS_ready = function () {
+          parent.postMessage({ type: "nexum-emu", status: "ready", rom }, location.origin);
+        };
+        window.EJS_onGameStart = function () {
+          hideStatus();
+          parent.postMessage({ type: "nexum-emu", status: "playing", rom }, location.origin);
+        };
+
+        watchStartErrors();
+        setStatus("Arrancando MAME 2003-Plus…", "Nucleo y ROMs locales, sin CDN");
+        const script = document.createElement("script");
+        script.src = "./ejs/loader.js";
+        script.onerror = () => {
+          setStatus("Falta el paquete local de EmulatorJS", "Ejecuta modulo_game/scripts/download_ejs.py", "error");
+        };
+        document.body.appendChild(script);
+      }
+
+      boot().catch((err) => {
+        setStatus("Error al preparar el juego", String(err && err.message ? err.message : err), "error");
+      });
+    </script>
+  </body>
+</html>

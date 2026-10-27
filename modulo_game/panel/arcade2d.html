@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NEXUM Arcade 2D</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #040806;
+        overflow: hidden;
+        font-family: "IBM Plex Sans", sans-serif;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        background: #040806;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" width="640" height="360"></canvas>
+    <script>
+      const canvas = document.querySelector("#game");
+      const ctx = canvas.getContext("2d");
+      const keys = {
+        up: false, down: false, left: false, right: false,
+        a: false, b: false, c: false, d: false, start: false
+      };
+
+      const GESTURE = {
+        btn_A: "a", btn_B: "b", btn_C: "c", btn_D: "d",
+        start: "start", arriba: "up", abajo: "down",
+        izquierda: "left", derecha: "right"
+      };
+      const KEY_ALIAS = {
+        arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right",
+        w: "up", s: "b", a: "a", d: "c", f: "d",
+        enter: "start", "1": "start", " ": "a"
+      };
+
+      function setKey(name, down) {
+        if (name && Object.prototype.hasOwnProperty.call(keys, name)) keys[name] = Boolean(down);
+      }
+
+      window.addEventListener("keydown", (ev) => {
+        const name = KEY_ALIAS[ev.key.toLowerCase()] || (GESTURE[ev.key] ? GESTURE[ev.key] : ev.key.toLowerCase());
+        if (name in keys) {
+          ev.preventDefault();
+          setKey(name, true);
+        }
+      });
+      window.addEventListener("keyup", (ev) => {
+        const name = KEY_ALIAS[ev.key.toLowerCase()] || ev.key.toLowerCase();
+        if (name in keys) {
+          ev.preventDefault();
+          setKey(name, false);
+        }
+      });
+      let muted = false;
+      function reportState() {
+        parent.postMessage({ type: "nexum-emu-state", paused: state.paused, muted }, location.origin);
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== location.origin) return;
+        const msg = event.data;
+        if (msg?.type === "nexum-cmd") {
+          if (msg.cmd === "pause" && !state.over) state.paused = !state.paused;
+          else if (msg.cmd === "restart") reset();
+          else if (msg.cmd === "mute") muted = !muted;
+          reportState();
+          return;
+        }
+        if (!msg || msg.type !== "nexum-key") return;
+        const name = GESTURE[msg.gesture] || KEY_ALIAS[String(msg.key || "").toLowerCase()];
+        if (name) setKey(name, Boolean(msg.down));
+      });
+
+      const state = {
+        t: 0,
+        score: 0,
+        lives: 5,
+        paused: false,
+        over: false,
+        fireCd: 0,
+        bombCd: 0,
+        dash: 0,
+        shield: 0,
+        hurt: 80,
+        player: { x: 70, y: 220, w: 28, h: 36, vy: 0, grounded: true },
+        bullets: [],
+        bombs: [],
+        enemies: [],
+        particles: [],
+        stars: Array.from({ length: 48 }, () => ({
+          x: Math.random() * 640,
+          y: Math.random() * 360,
+          s: 0.4 + Math.random() * 1.8,
+          a: 0.25 + Math.random() * 0.6
+        }))
+      };
+
+      function spawnEnemy() {
+        const flying = Math.random() < 0.45;
+        state.enemies.push({
+          x: 660,
+          y: flying ? 50 + Math.random() * 160 : 236,
+          w: flying ? 26 : 30,
+          h: flying ? 18 : 28,
+          hp: flying ? 1 : 2,
+          vy: flying ? (Math.random() * 1.4 - 0.7) : 0,
+          kind: flying ? "drone" : "trooper"
+        });
+      }
+
+      function burst(x, y, color, n = 8) {
+        for (let i = 0; i < n; i += 1) {
+          state.particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 4.5,
+            vy: (Math.random() - 0.8) * 4,
+            life: 18 + Math.random() * 12,
+            color
+          });
+        }
+      }
+
+      function reset() {
+        state.score = 0;
+        state.lives = 5;
+        state.over = false;
+        state.paused = false;
+        state.hurt = 80;
+        state.enemies = [];
+        state.bullets = [];
+        state.bombs = [];
+        state.particles = [];
+        state.player.x = 70;
+        state.player.y = 220;
+        state.player.vy = 0;
+        parent.postMessage({ type: "nexum-emu", status: "playing", rom: "demo2d" }, location.origin);
+      }
+
+      let spawnAcc = 0;
+      let startLatch = false;
+
+      function update() {
+        state.t += 1;
+        if (keys.start && !startLatch) {
+          startLatch = true;
+          if (state.over) reset();
+          else if (state.t > 90) state.paused = !state.paused;
+        }
+        if (!keys.start) startLatch = false;
+        if (state.paused || state.over) return;
+
+        const p = state.player;
+        const speed = state.dash > 0 ? 5.4 : 2.7;
+        if (keys.left) p.x -= speed;
+        if (keys.right) p.x += speed;
+        if (keys.up && p.grounded) {
+          p.vy = -8.4;
+          p.grounded = false;
+        }
+        p.vy += 0.38;
+        p.y += p.vy;
+        if (p.y >= 220) {
+          p.y = 220;
+          p.vy = 0;
+          p.grounded = true;
+        }
+        p.x = Math.max(18, Math.min(420, p.x));
+        if (keys.down && p.grounded) p.h = 22;
+        else p.h = 36;
+
+        if (keys.b && state.dash <= 0) state.dash = 14;
+        if (state.dash > 0) state.dash -= 1;
+        if (keys.d) state.shield = 10;
+        if (state.shield > 0) state.shield -= 1;
+        if (state.hurt > 0) state.hurt -= 1;
+
+        state.fireCd = Math.max(0, state.fireCd - 1);
+        if (keys.a && state.fireCd === 0) {
+          state.fireCd = 9;
+          state.bullets.push({ x: p.x + p.w, y: p.y + 12, vx: 9 });
+        }
+
+        state.bombCd = Math.max(0, state.bombCd - 1);
+        if (keys.c && state.bombCd === 0) {
+          state.bombCd = 50;
+          state.bombs.push({ x: p.x + 10, y: p.y, vy: -3, r: 6 });
+        }
+
+        spawnAcc += 1;
+        if (state.t > 120 && spawnAcc > Math.max(42, 96 - state.score / 50)) {
+          spawnAcc = 0;
+          spawnEnemy();
+        }
+
+        state.bullets = state.bullets.filter((b) => {
+          b.x += b.vx;
+          return b.x < 660;
+        });
+        state.bombs = state.bombs.filter((b) => {
+          b.vy += 0.28;
+          b.y += b.vy;
+          b.x += 1.4;
+          if (b.y > 248) {
+            burst(b.x, 248, "#ffb35c", 16);
+            state.enemies.forEach((e) => {
+              if (Math.abs(e.x - b.x) < 70) e.hp = 0;
+            });
+            return false;
+          }
+          return true;
+        });
+
+        state.enemies.forEach((e) => {
+          e.x -= e.kind === "drone" ? 1.8 : 1.25;
+          e.y += e.vy;
+          if (e.y < 36 || e.y > 236) e.vy *= -1;
+        });
+
+        for (const b of state.bullets) {
+          for (const e of state.enemies) {
+            if (e.hp > 0 && b.x > e.x && b.x < e.x + e.w && b.y > e.y && b.y < e.y + e.h) {
+              e.hp -= 1;
+              b.x = 999;
+              burst(e.x, e.y, "#7dffd2", 6);
+              if (e.hp <= 0) state.score += e.kind === "drone" ? 150 : 100;
+            }
+          }
+        }
+
+        state.enemies = state.enemies.filter((e) => {
+          if (e.hp <= 0) return false;
+          if (e.x + e.w < 0) return false;
+          const hit = p.x < e.x + e.w && p.x + p.w > e.x && p.y < e.y + e.h && p.y + p.h > e.y;
+          if (hit) {
+            if (state.shield > 0 || state.hurt > 0) {
+              e.hp = 0;
+              burst(e.x, e.y, "#7ecbff", 10);
+              return false;
+            }
+            state.lives -= 1;
+            state.hurt = 90;
+            burst(p.x, p.y, "#ff6b6b", 14);
+            e.hp = 0;
+            if (state.lives <= 0) state.over = true;
+            return false;
+          }
+          return true;
+        });
+
+        state.particles = state.particles.filter((pt) => {
+          pt.x += pt.vx;
+          pt.y += pt.vy;
+          pt.life -= 1;
+          return pt.life > 0;
+        });
+        state.stars.forEach((s) => {
+          s.x -= s.s;
+          if (s.x < 0) {
+            s.x = 640;
+            s.y = Math.random() * 360;
+          }
+        });
+      }
+
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      function draw() {
+        const g = ctx.createLinearGradient(0, 0, 0, 360);
+        g.addColorStop(0, "#081410");
+        g.addColorStop(0.62, "#0b1c16");
+        g.addColorStop(1, "#143228");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 640, 360);
+
+        ctx.fillStyle = "#0d8f7d";
+        state.stars.forEach((s) => {
+          ctx.globalAlpha = s.a;
+          ctx.fillRect(s.x, s.y, s.s + 0.6, 1);
+        });
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = "#0a2a22";
+        ctx.fillRect(0, 256, 640, 104);
+        ctx.fillStyle = "#0d8f7d";
+        ctx.globalAlpha = 0.35;
+        for (let x = ((state.t * 2) % 32) - 32; x < 640; x += 32) {
+          ctx.fillRect(x, 256, 18, 3);
+        }
+        ctx.globalAlpha = 1;
+
+        const p = state.player;
+        if (state.shield > 0) {
+          ctx.strokeStyle = "rgba(126,203,255,.85)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(p.x + p.w / 2, p.y + p.h / 2, 28, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = state.dash > 0 ? "#7dffd2" : (state.hurt > 0 && state.t % 8 < 4 ? "#7a8a86" : "#e8eee8");
+        roundRect(p.x, p.y, p.w, p.h, 4);
+        ctx.fill();
+        ctx.fillStyle = "#0d8f7d";
+        ctx.fillRect(p.x + 16, p.y + 8, 14, 6);
+
+        ctx.fillStyle = "#ffd37a";
+        state.bullets.forEach((b) => ctx.fillRect(b.x, b.y, 10, 3));
+        ctx.fillStyle = "#ffb35c";
+        state.bombs.forEach((b) => {
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        state.enemies.forEach((e) => {
+          ctx.fillStyle = e.kind === "drone" ? "#ff8a7a" : "#c97bff";
+          roundRect(e.x, e.y, e.w, e.h, 3);
+          ctx.fill();
+        });
+
+        state.particles.forEach((pt) => {
+          ctx.globalAlpha = Math.max(0, pt.life / 24);
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(pt.x, pt.y, 2, 2);
+        });
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = "#e8eee8";
+        ctx.font = "600 14px sans-serif";
+        ctx.fillText(`NEXUM 2D   ${state.score.toString().padStart(6, "0")}   vidas ${state.lives}`, 16, 24);
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(232,238,232,.72)";
+        ctx.fillText("A disparo  B dash  C bomba  D escudo  flechas mover  Start pausa", 16, 344);
+
+        if (state.paused || state.over) {
+          ctx.fillStyle = "rgba(4,8,6,.55)";
+          ctx.fillRect(0, 0, 640, 360);
+          ctx.fillStyle = "#7dffd2";
+          ctx.font = "800 28px sans-serif";
+          ctx.fillText(state.over ? "GAME OVER" : "PAUSA", 230, 170);
+          ctx.fillStyle = "#e8eee8";
+          ctx.font = "14px sans-serif";
+          ctx.fillText("Pulsa START / puño izquierdo para seguir", 188, 198);
+        }
+      }
+
+      let lastReport = "";
+      function loop() {
+        const wasPaused = state.paused;
+        update();
+        draw();
+        if (wasPaused !== state.paused) reportState();
+        if (state.t % 15 === 0) {
+          const key = `${state.score}|${state.lives}|${state.over}`;
+          if (key !== lastReport) {
+            lastReport = key;
+            parent.postMessage({ type: "nexum-score", score: state.score, lives: state.lives, over: state.over }, location.origin);
+          }
+        }
+        requestAnimationFrame(loop);
+      }
+
+      parent.postMessage({ type: "nexum-emu", status: "playing", rom: "demo2d" }, location.origin);
+      loop();
+    </script>
+  </body>
+</html>

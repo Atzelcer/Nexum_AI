@@ -1,28 +1,17 @@
-# NEXUM AI ? entorno Python unico (raiz del proyecto)
-# Crear:  python -m venv .venv
-# Activar (Git Bash):  source .venv/Scripts/activate
-# Instalar:  pip install -r requirements.txt
-
-# --- modulo_game: servidor de recoleccion ---
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 
-# --- modulo_game + teclado: inyeccion de teclado/mouse ---
 pynput>=1.7.7
 
-# --- modulo_game: entrenamiento e inferencia ---
 numpy>=1.26.0
 pandas>=2.2.0
 scikit-learn>=1.5.0
 torch>=2.2.0
 
-# --- vision (perfil / modulo futuro MediaPipe) ---
 opencv-python>=4.10.0
 mediapipe>=0.10.14
 
-# --- base de datos (project/database Mongo) ---
 pymongo>=4.10.0
 
-# --- utilidades compartidas ---
 python-dotenv>=1.0.1
 websockets>=13.0

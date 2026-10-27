@@ -1,15 +1,25 @@
--- NEXUM AI - Modelo relacional equivalente (PostgreSQL 15+)
--- 30 tablas: 6 compartidas + 8 por cada una de las 3 modalidades.
--- Solo crea estructura, restricciones e índices. NO inserta datos.
-
 BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS nexum_ai;
 SET search_path TO nexum_ai;
 
--- ============================================================================
--- NÚCLEO COMPARTIDO
--- ============================================================================
+CREATE TABLE usuario (
+  codigo_usuario VARCHAR(64) PRIMARY KEY,
+  nombre_usuario VARCHAR(120) NOT NULL,
+  correo_usuario VARCHAR(180) NOT NULL UNIQUE,
+  tipo_usuario VARCHAR(20) NOT NULL CHECK (
+    tipo_usuario IN ('registrado', 'invitado', 'sistema')
+  ),
+  estado_usuario VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (
+    estado_usuario IN ('activo', 'inactivo')
+  ),
+  salt VARCHAR(64) NOT NULL,
+  password_hash VARCHAR(128) NOT NULL,
+  fecha_registro TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_usuario_nombre ON usuario (nombre_usuario);
+CREATE INDEX idx_usuario_estado ON usuario (estado_usuario);
 
 CREATE TABLE catalogo_gestos (
   codigo_gesto VARCHAR(64) PRIMARY KEY,
@@ -39,6 +49,7 @@ CREATE TABLE modalidades_aplicacion (
       'interaccion_hibrida'
     )
   ),
+  codigo_usuario VARCHAR(64) REFERENCES usuario (codigo_usuario) ON DELETE SET NULL,
   nombre_modalidad VARCHAR(120) NOT NULL,
   descripcion_modalidad TEXT,
   motor_destino VARCHAR(20) NOT NULL CHECK (
@@ -129,10 +140,6 @@ CREATE TABLE modelos_entrenados (
   fecha_entrenamiento TIMESTAMPTZ,
   fecha_registro TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
--- ============================================================================
--- MODALIDAD 1: ARQUITECTO TRIDIMENSIONAL (THREE.JS)
--- ============================================================================
 
 CREATE TABLE arquitecto_comandos (
   codigo_comando VARCHAR(64) PRIMARY KEY,
@@ -258,10 +265,6 @@ CREATE TABLE arquitecto_escenas (
   fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================================
--- MODALIDAD 2: CONTROL DE VIDEOJUEGO (UNITY)
--- ============================================================================
-
 CREATE TABLE videojuego_comandos (
   codigo_comando VARCHAR(64) PRIMARY KEY,
   nombre_comando VARCHAR(120) NOT NULL,
@@ -383,10 +386,6 @@ CREATE TABLE videojuego_perfil_jugador (
   estadisticas_combate JSONB NOT NULL DEFAULT '{}',
   fecha_registro TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
--- ============================================================================
--- MODALIDAD 3: INTERACCIÓN HÍBRIDA (NAVEGADOR)
--- ============================================================================
 
 CREATE TABLE hibrida_comandos (
   codigo_comando VARCHAR(64) PRIMARY KEY,
@@ -510,10 +509,6 @@ CREATE TABLE hibrida_teclado_virtual (
   posicion_cursor JSONB NOT NULL DEFAULT '{}',
   fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
--- ============================================================================
--- ÍNDICES OPERATIVOS
--- ============================================================================
 
 CREATE INDEX idx_gestos_tipo_activo
   ON catalogo_gestos(tipo_gesto, activo);

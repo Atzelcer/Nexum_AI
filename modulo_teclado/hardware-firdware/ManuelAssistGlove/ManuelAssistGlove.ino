@@ -21,6 +21,9 @@
 #define WIFI_SSID "ModoB"
 #define WIFI_PASS "1234567899"
 
+const char* GLOVE_HAND = "";
+char gloveHandId[3] = "";
+
 const uint16_t PC_PORT = 5005;
 const uint16_t ESP_PORT = 5006;
 const uint8_t NUM_SENSORES = 5;
@@ -56,6 +59,7 @@ float angleXFilt[NUM_SENSORES];
 float angleYFilt[NUM_SENSORES];
 float gyroRateX[NUM_SENSORES];
 float gyroRateY[NUM_SENSORES];
+float gyroRateZ[NUM_SENSORES];
 
 String estadoTemporal[NUM_SENSORES];
 String estadoConfirmado[NUM_SENSORES];
@@ -67,36 +71,67 @@ unsigned long pulsoActivoDesde[NUM_SENSORES];
 uint8_t contadorEstable[NUM_SENSORES];
 unsigned long lastTime = 0;
 unsigned long ultimoEnvioImu = 0;
+unsigned long ultimoHeartbeatJuego = 0;
+unsigned long ultimoCalibrateCmd = 0;
 
 bool calibracionPendiente = false;
+bool calibrando = false;
 bool sensoresCalibrados = false;
 bool envioDatosHabilitado = false;
 bool modoComplementos = false;
+bool modoJuego = false;
+
+WiFiUDP udp;
+IPAddress pcIp;
+bool pcConectada = false;
+bool udpListo = false;
+unsigned long ultimoHello = 0;
+unsigned long ultimoUdpRx = 0;
+unsigned long ultimoIntentoWifi = 0;
+const unsigned long PC_TIMEOUT_MS = 45000;
+const unsigned long HELLO_MS = 1000;
+const unsigned long WIFI_RETRY_MS = 10000;
 
 const float ALPHA_ANGLE = 0.28;
 const float DEADZONE_GYRO = 2.0;
 const float COMPLEMENTARY = 0.96;
 
 float ACTIVAR_ON[NUM_SENSORES] = {
-  6.0,    // meñique
-  3.5,    // anular
-  6.0,    // medio
-  14.0,   // índice
-  14.0    // pulgar
+  5.5,
+  4.0,
+  5.5,
+  6.5,
+  3.2
 };
 
 float ACTIVAR_OFF[NUM_SENSORES] = {
-  3.8,    // meñique
-  1.8,    // anular
-  3.0,    // medio
-  7.0,    // índice
-  7.0     // pulgar
+  2.5,
+  2.0,
+  2.5,
+  3.0,
+  1.4
 };
+
+const float ACTIVAR_ON_LAB[NUM_SENSORES] = { 5.5, 4.0, 5.5, 6.5, 3.2 };
+const float ACTIVAR_OFF_LAB[NUM_SENSORES] = { 2.5, 2.0, 2.5, 3.0, 1.4 };
+const float ACTIVAR_ON_JUEGO[NUM_SENSORES] = { 5.5, 22.0, 5.0, 6.5, 3.2 };
+const float ACTIVAR_OFF_JUEGO[NUM_SENSORES] = { 2.8, 12.0, 2.5, 3.2, 1.4 };
+
+void aplicarUmbralesJuego(bool juego) {
+  const float *on = juego ? ACTIVAR_ON_JUEGO : ACTIVAR_ON_LAB;
+  const float *off = juego ? ACTIVAR_OFF_JUEGO : ACTIVAR_OFF_LAB;
+  for (uint8_t i = 0; i < NUM_SENSORES; i++) {
+    ACTIVAR_ON[i] = on[i];
+    ACTIVAR_OFF[i] = off[i];
+  }
+}
 
 const uint8_t FRAMES_CONFIRMACION = 2;
 const uint8_t FRAMES_REPOSO_RAPIDO = 1;
 const unsigned long PULSO_ACTIVO_MS = 800;
 const unsigned long IMU_CURSOR_MS = 18;
+const unsigned long IMU_JUEGO_MS = 40;
+const unsigned long HEARTBEAT_JUEGO_MS = 280;
 
 const int   CAL_WARMUP       = 80;
 const int   CAL_MUESTRAS     = 500;
@@ -104,7 +139,11 @@ const int   CAL_MAX_INTENTOS = 4;
 const float CAL_MAX_STD_GYRO = 3.0;
 
 void iniciarRed();
+void abrirUdp();
+void vigilarWifi();
 void procesarRed();
+void enviarEstadoCalibracion();
+void limpiarPulsos();
 void enviarSistema(const String &msg);
 void enviarDato(const String &dedo, const String &estado);
 void enviarCalibracionProgreso(uint8_t actual, uint8_t total);
@@ -131,6 +170,8 @@ void calibrarSensores();
 void actualizarDedo(uint8_t i, float dt);
 void enviarCambios();
 void enviarImuCursor();
+void enviarImuJuego();
+void enviarHeartbeatJuego();
 
 void setup() {
   Serial.begin(115200);
@@ -138,8 +179,17 @@ void setup() {
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(100000);
+#if defined(WIRE_HAS_TIMEOUT) || defined(ESP32)
+  Wire.setTimeOut(80);
+#endif
 
   iniciarRed();
+
+  gloveHandId[0] = 0;
+  if (GLOVE_HAND[0] == 'l' || GLOVE_HAND[0] == 'r') {
+    gloveHandId[0] = GLOVE_HAND[0];
+    gloveHandId[1] = 0;
+  }
 
   enviarSistema("DETECTANDO");
   detectarSensores();
@@ -152,6 +202,7 @@ void setup() {
     pulsoActivoDesde[i] = 0;
     gyroRateX[i] = 0;
     gyroRateY[i] = 0;
+    gyroRateZ[i] = 0;
   }
 
   lastTime = millis();
@@ -162,9 +213,14 @@ void loop() {
 
   if (calibracionPendiente) {
     calibracionPendiente = false;
+    calibrando = true;
     envioDatosHabilitado = false;
     calibrarSensores();
     sensoresCalibrados = true;
+    calibrando = false;
+    ultimoCalibrateCmd = millis();
+    if (pcConectada) ultimoUdpRx = millis();
+    procesarRed();
   }
 
   unsigned long now = millis();
@@ -181,7 +237,10 @@ void loop() {
 
   if (sensoresCalibrados && envioDatosHabilitado) {
     enviarCambios();
-    enviarImuCursor();
+    if (modoJuego) {
+      enviarImuJuego();
+      enviarHeartbeatJuego();
+    }
   }
   delay(6);
 }

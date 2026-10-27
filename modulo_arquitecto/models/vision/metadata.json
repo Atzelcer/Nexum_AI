@@ -1,0 +1,20 @@
+{
+  "codigo_modelo": "arch_vision_pos3_v1",
+  "descripcion": "Clasificador de 3 posiciones horizontales (izq/centro/der)",
+  "muestras_por_clase": 150,
+  "posiciones": {
+    "posicion_izq": "Sala",
+    "posicion_centro": "Cocina",
+    "posicion_der": "Escalera"
+  },
+  "tipo_modelo": "clasificador",
+  "codigo_modalidad": "arquitecto_tridimensional",
+  "motor_deteccion": "hand_landmarker",
+  "clases": [
+    "posicion_izq",
+    "posicion_centro",
+    "posicion_der"
+  ],
+  "input_size": 134,
+  "estado_modelo": "listo"
+}

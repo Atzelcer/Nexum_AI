@@ -1,15 +1,3 @@
-// =============================================================================
-// NEXUM AI - Copiar y pegar en: https://dbdiagram.io
-//
-// FILA 1  USUARIO | modalidades_aplicacion
-// FILA 2  catalogo_gestos | reglas_comando_semantico | catalogo_comandos
-// FILA 3  configuracion_guante | configuracion_sistema | configuracion_vision
-// FILA 4  sesiones_captura
-// FILA 5  muestras_multimodales | historial_comandos | registros_telemetria | modelos_entrenados
-//
-// USUARIO se enlaza SOLO con modalidades_aplicacion (codigoUsuario puede ser null).
-// =============================================================================
-
 Project nexum_ai {
   database_type: 'PostgreSQL / MongoDB conceptual'
   Note: 'Núcleo ordenado por filas. USUARIO es opcional y solo se relaciona con modalidades_aplicacion.'
@@ -43,16 +31,14 @@ TableGroup "FILA 5 - Datos y ML" [color: #475569] {
   modelos_entrenados
 }
 
-// -----------------------------------------------------------------------------
-// FILA 1
-// -----------------------------------------------------------------------------
-
 Table USUARIO {
   codigoUsuario varchar [pk]
   nombreUsuario varchar
   correoUsuario varchar
   tipoUsuario varchar [note: 'registrado | invitado | sistema']
   estadoUsuario varchar [note: 'activo | inactivo']
+  salt varchar [note: 'hash local / runtime']
+  passwordHash varchar
   fechaRegistro datetime
 
   Note: 'FILA 1. Opcional. null en modalidades_aplicacion = uso sin usuario.'
@@ -74,10 +60,6 @@ Table modalidades_aplicacion {
 
   Note: 'FILA 1. Única tabla del núcleo que apunta a USUARIO.'
 }
-
-// -----------------------------------------------------------------------------
-// FILA 2
-// -----------------------------------------------------------------------------
 
 Table catalogo_gestos {
   codigoGesto varchar [pk]
@@ -125,10 +107,6 @@ Table catalogo_comandos {
   activo boolean
   fechaRegistro datetime
 }
-
-// -----------------------------------------------------------------------------
-// FILA 3
-// -----------------------------------------------------------------------------
 
 Table configuracion_guante {
   codigoGuante varchar [pk]
@@ -184,10 +162,6 @@ Table configuracion_vision {
   fechaRegistro datetime
 }
 
-// -----------------------------------------------------------------------------
-// FILA 4
-// -----------------------------------------------------------------------------
-
 Table sesiones_captura {
   codigoSesion varchar [pk]
   codigoModalidad varchar [ref: > modalidades_aplicacion.codigoModalidad]
@@ -200,10 +174,6 @@ Table sesiones_captura {
 
   Note: 'FILA 4. Hub operativo: une modalidad, guante y cámara.'
 }
-
-// -----------------------------------------------------------------------------
-// FILA 5
-// -----------------------------------------------------------------------------
 
 Table muestras_multimodales {
   codigoMuestra varchar [pk]

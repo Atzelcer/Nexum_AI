@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NEXUM AI · Control de videojuego</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css?v=20">
+    <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
+  </head>
+  <body>
+    <div class="app-frame">
+      <header class="lab-nav">
+        <a class="back-link" href="../../index.html">NEXUM <span class="brand-ai">AI</span></a>
+        <div class="lab-nav-center">
+          <p class="lab-kicker">Modalidad 03</p>
+          <h1>Control de videojuego</h1>
+        </div>
+        <div class="lab-nav-actions">
+          <button id="helpBtn" type="button">Ayuda</button>
+          <button id="playWebBtn" type="button" class="accent">▶ Jugar</button>
+          <a class="nav-close" href="/index.html">Cerrar</a>
+        </div>
+      </header>
+
+      <div class="lab-grid">
+        <section class="stage" aria-label="Pantalla de juego">
+          <div class="scene-host cabinet-host">
+            <div class="stage-atmosphere" aria-hidden="true"></div>
+            <div class="stage-grain" aria-hidden="true"></div>
+
+            <div class="screen-chassis">
+              <div class="chassis-bezel">
+                <span class="bezel-screw bezel-screw--tl" aria-hidden="true"></span>
+                <span class="bezel-screw bezel-screw--tr" aria-hidden="true"></span>
+                <div class="bezel-status">
+                  <span id="emuBadge" class="pill">Juego: detenido</span>
+                  <span id="camBadge" class="pill">Cámara: apagada</span>
+                </div>
+                <span id="bezelLabel" class="bezel-label">NEO GEO · MVS</span>
+                <div class="bezel-hands" aria-label="Manos detectadas">
+                  <span id="handDotLeft" class="hand-dot" title="Mano izquierda">IZQ</span>
+                  <span id="handDotRight" class="hand-dot" title="Mano derecha">DER</span>
+                </div>
+              </div>
+
+              <div class="screen-wrap" id="screenWrap">
+                <div class="screen-glow" aria-hidden="true"></div>
+                <div class="cabinet-screen" id="cabinetScreen">
+                  <div class="crt-overlay" aria-hidden="true"></div>
+                  <div class="screen-vignette" aria-hidden="true"></div>
+                  <iframe id="webEmu" class="web-emu" title="Juego" allow="autoplay; fullscreen; gamepad" hidden></iframe>
+
+                  <div class="attract" id="attract">
+                    <div id="attractArt" class="attract-art" aria-hidden="true"><span id="attractGlyph">MS</span></div>
+                    <p class="attract-kicker" id="attractMeta">NEO GEO · 1996 · Run &amp; gun</p>
+                    <p id="gameTitle" class="game-title">Metal Slug</p>
+                    <p class="attract-coin">INSERT COIN</p>
+                    <ol class="attract-steps">
+                      <li><b>1</b> Elige un juego</li>
+                      <li><b>2</b> Pulsa ▶ Jugar</li>
+                      <li><b>3</b> Puño izquierdo = START</li>
+                    </ol>
+                    <p id="cabinetHint" class="cabinet-hint">Sin cámara también puedes jugar con el teclado: flechas, Z X C V y Enter.</p>
+                  </div>
+
+                  <div class="play-hud" id="playHud" aria-live="polite">
+                    <div class="hud-chip"><span>Tiempo</span><strong id="hudTime">00:00</strong></div>
+                    <div class="hud-chip"><span>Acciones</span><strong id="hudActions">0</strong></div>
+                    <div class="hud-chip" id="hudScoreChip" hidden><span>Puntos</span><strong id="hudScore">0</strong></div>
+                  </div>
+
+                  <div class="input-ribbon" id="inputRibbon" aria-hidden="true"></div>
+
+                  <div class="cam-countdown" id="camCountdown" hidden>
+                    <span>Cámara en</span>
+                    <strong id="camCountdownNum">4</strong>
+                    <button id="camCountdownCancel" type="button">Ahora no</button>
+                  </div>
+
+                  <div class="pause-veil" id="pauseVeil" hidden>
+                    <strong>PAUSA</strong>
+                    <span>Pulsa ⏯ o la barra espaciadora para seguir</span>
+                  </div>
+
+                  <div id="gestureFlash" class="gesture-flash" aria-hidden="true"></div>
+                </div>
+              </div>
+
+              <div class="screen-toolbar" role="toolbar" aria-label="Controles del juego">
+                <div class="now-playing">
+                  <span id="nowDot" class="now-dot"></span>
+                  <div>
+                    <strong id="nowTitle">Metal Slug</strong>
+                    <small id="nowMeta">Listo para jugar</small>
+                  </div>
+                </div>
+                <div class="toolbar-btns">
+                  <button id="pauseBtn" type="button" class="tool-btn" disabled title="Pausa (Espacio)"><span>⏯</span><em>Pausa</em></button>
+                  <button id="restartBtn" type="button" class="tool-btn" disabled title="Reiniciar partida"><span>↻</span><em>Reiniciar</em></button>
+                  <button id="muteBtn" type="button" class="tool-btn" disabled title="Silenciar (M)"><span>🔊</span><em>Sonido</em></button>
+                  <button id="fullscreenBtn" type="button" class="tool-btn" title="Pantalla completa (F)"><span>⛶</span><em>Completa</em></button>
+                  <button id="stopWebBtn" type="button" class="tool-btn tool-btn--stop" disabled title="Detener juego"><span>■</span><em>Detener</em></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="rail" aria-label="Controles">
+          <section id="arcadePanel" class="rail-block rail-block--arcade is-idle" aria-label="Mando en vivo">
+            <div class="arcade-header-top">
+              <span class="arcade-badge">P1</span>
+              <span id="arcadeStatus" class="arcade-status-mini">En espera</span>
+              <span id="inputSource" class="input-source">—</span>
+            </div>
+            <div class="cabinet-deck">
+              <div class="deck-panel">
+                <div class="dpad" aria-label="Cruceta">
+                  <button type="button" data-pad="up" data-input="arriba" aria-label="Arriba">↑</button>
+                  <button type="button" data-pad="left" data-input="izquierda" aria-label="Izquierda">←</button>
+                  <button type="button" data-pad="right" data-input="derecha" aria-label="Derecha">→</button>
+                  <button type="button" data-pad="down" data-input="abajo" aria-label="Abajo">↓</button>
+                  <i class="dpad-core" aria-hidden="true"></i>
+                </div>
+              </div>
+              <div class="deck-panel deck-panel--face">
+                <div class="face-btns" aria-label="Botones">
+                  <button type="button" data-btn="btn_A" data-input="btn_A" aria-label="A"><span>A</span></button>
+                  <button type="button" data-btn="btn_B" data-input="btn_B" aria-label="B"><span>B</span></button>
+                  <button type="button" data-btn="btn_C" data-input="btn_C" aria-label="C"><span>C</span></button>
+                  <button type="button" data-btn="btn_D" data-input="btn_D" aria-label="D"><span>D</span></button>
+                  <button type="button" class="start-btn" data-btn="start" data-input="start" aria-label="Start"><span>START</span></button>
+                </div>
+              </div>
+            </div>
+            <p class="deck-note">Pulsa los botones con el mouse o usa el teclado: flechas · Z X C V · Enter.</p>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Cámara · 2 manos</h2>
+              <span class="section-hint">MediaPipe</span>
+            </div>
+            <div class="vision-pip" id="visionPip">
+              <video id="visionVideo" class="vision-video-src" playsinline muted></video>
+              <canvas id="visionCanvas" width="320" height="240" aria-label="Cámara 2 manos"></canvas>
+              <div class="vision-empty" id="visionEmpty">
+                <span>📷</span>
+                <p>Mano izquierda mueve · mano derecha actúa</p>
+              </div>
+            </div>
+            <div class="steer" id="steer" aria-label="Dirección de la mano izquierda">
+              <div class="steer-track">
+                <span class="steer-zone steer-zone--back" id="steerBack">← Atrás</span>
+                <span class="steer-zone steer-zone--mid" id="steerMid">quieto</span>
+                <span class="steer-zone steer-zone--fwd" id="steerFwd">Avanza →</span>
+                <i class="steer-marker" id="steerMarker"></i>
+              </div>
+              <p id="visionStatus" class="vision-status">Cámara apagada</p>
+            </div>
+            <button id="visionBtn" type="button" class="primary wide">Activar cámara</button>
+
+            <details class="settings" id="settingsBox">
+              <summary>Ajustes de control</summary>
+              <label class="setting-range">
+                <span>Zona muerta central</span>
+                <input id="zoneInput" type="range" min="10" max="40" step="2" value="20">
+                <output id="zoneOut">20%</output>
+              </label>
+              <label class="setting-range">
+                <span>Velocidad de ráfaga</span>
+                <input id="fireInput" type="range" min="60" max="300" step="10" value="120">
+                <output id="fireOut">8/s</output>
+              </label>
+              <label class="setting-check">
+                <input id="invertInput" type="checkbox">
+                <span>Invertir izquierda / derecha</span>
+              </label>
+              <label class="setting-check">
+                <input id="autoCamInput" type="checkbox" checked>
+                <span>Encender la cámara al empezar el juego</span>
+              </label>
+            </details>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Biblioteca</h2>
+              <span class="section-hint" id="libraryCount">10 juegos</span>
+            </div>
+            <div class="library-filters" role="tablist" aria-label="Filtrar por género">
+              <button type="button" class="filter-btn is-active" data-filter="all">Todos</button>
+              <button type="button" class="filter-btn" data-filter="runGun">Acción</button>
+              <button type="button" class="filter-btn" data-filter="fighter">Pelea</button>
+              <button type="button" class="filter-btn" data-filter="shmup">Naves</button>
+            </div>
+            <div class="game-library" id="gameLibrary" role="listbox" aria-label="Juegos"></div>
+            <p id="libraryNote" class="rail-note">Doble clic en un juego para empezar a jugar.</p>
+          </section>
+
+          <section class="rail-block rail-block--last">
+            <div class="section-head">
+              <h2>Mapa de gestos</h2>
+              <span class="section-hint" id="profileName">Run &amp; gun</span>
+            </div>
+            <div class="gesture-grid" id="gestureGrid"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <div class="help-overlay" id="helpOverlay" hidden>
+      <div class="help-card" role="dialog" aria-labelledby="helpTitle">
+        <button class="help-close" id="helpClose" type="button" aria-label="Cerrar">×</button>
+        <h2 id="helpTitle">Cómo jugar</h2>
+        <div class="help-cols">
+          <div>
+            <h3>Mano izquierda</h3>
+            <ul>
+              <li><b>Índice a la derecha</b> → avanza</li>
+              <li><b>Índice a la izquierda</b> → retrocede</li>
+              <li><b>Solo meñique</b> → arriba / acción extra</li>
+              <li><b>Puño</b> → moneda + START</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Mano derecha</h3>
+            <ul>
+              <li><b>Palma abierta</b> → disparo / golpe (ráfaga)</li>
+              <li><b>Puño</b> → salto / patada</li>
+              <li><b>Índice hacia abajo</b> → agacharse</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Teclado</h3>
+            <ul>
+              <li><b>Flechas</b> → mover</li>
+              <li><b>Z X C V</b> → botones A B C D</li>
+              <li><b>Enter</b> → START · <b>5</b> moneda</li>
+              <li><b>Espacio</b> pausa · <b>M</b> sonido · <b>F</b> completa</li>
+            </ul>
+          </div>
+        </div>
+        <p class="help-tip">Consejo: ponte a un brazo de la cámara, con luz de frente y las dos manos dentro del recuadro.</p>
+      </div>
+    </div>
+
+    <script>
+      window.NEXUM_ORBIT = {
+        current: "game",
+        fabDark: true,
+        paths: {
+          inicio: "/index.html",
+          computador: "/modulo_teclado/laboratorio-web/",
+          arquitecto: "/modulo_arquitecto/panel/",
+          game: "/modulo_game/panel/"
+        },
+        onAjustes() {
+          const box = document.querySelector("#settingsBox");
+          if (box) box.open = true;
+          document.querySelector("#zoneInput")?.focus();
+        }
+      };
+    </script>
+    <script src="../../shared/module-wheel.js?v=9"></script>
+    <script type="module" src="./app.js?v=40"></script>
+  </body>
+</html>

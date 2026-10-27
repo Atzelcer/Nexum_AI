@@ -1,7 +1,3 @@
-/**
- * Diagrama NoSQL estilo original: blanco/negro, sin solapes, flechas en canales.
- * node database/diagrams/generar_diagrama_completo.js
- */
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -139,5 +135,4 @@ svg += `\n</svg>\n`;
 
 const svgPath = path.join(__dirname, "diagrama_nexum_ai_completo.svg");
 fs.writeFileSync(svgPath, svg, "utf8");
-fs.copyFileSync(svgPath, path.join(__dirname, "..", "mongodb", "diagrama_nexum_ai_completo.svg"));
 console.log("SVG generado:", svgPath);

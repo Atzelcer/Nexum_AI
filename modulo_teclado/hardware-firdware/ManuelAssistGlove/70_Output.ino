@@ -2,16 +2,14 @@ void enviarCambios() {
   unsigned long now = millis();
 
   for (uint8_t i = 0; i < NUM_SENSORES; i++) {
-    if (modoComplementos && i == INDICE) {
+    if (modoJuego) {
       if (estadoConfirmado[i] != ultimoEstadoEnviado[i]) {
         enviarDato(dedos[i], estadoConfirmado[i]);
         ultimoEstadoEnviado[i] = estadoConfirmado[i];
       }
-      if (estadoConfirmado[i] == "reposo") {
-        pulsoActivoEnviado[i] = false;
-        pulsoReposoForzado[i] = false;
-        pulsoActivoDesde[i] = 0;
-      }
+      pulsoActivoEnviado[i] = false;
+      pulsoReposoForzado[i] = false;
+      pulsoActivoDesde[i] = 0;
       continue;
     }
 
@@ -62,4 +60,36 @@ void enviarImuCursor() {
   msg += ",";
   msg += estadoConfirmado[INDICE];
   enviarAPC(msg);
+}
+
+void enviarImuJuego() {
+  unsigned long now = millis();
+  if (now - ultimoEnvioImu < IMU_JUEGO_MS) return;
+  ultimoEnvioImu = now;
+
+  if (sensorOK[MENIQUE]) {
+    String msg = "IMU:";
+    msg += dedos[MENIQUE];
+    msg += ",";
+    msg += String(angleXFilt[MENIQUE], 2);
+    msg += ",";
+    msg += String(angleYFilt[MENIQUE], 2);
+    msg += ",";
+    msg += String(gyroRateX[MENIQUE], 2);
+    msg += ",";
+    msg += String(gyroRateY[MENIQUE], 2);
+    msg += ",";
+    msg += estadoConfirmado[MENIQUE];
+    enviarAPC(msg);
+  }
+}
+
+void enviarHeartbeatJuego() {
+  unsigned long now = millis();
+  if (now - ultimoHeartbeatJuego < HEARTBEAT_JUEGO_MS) return;
+  ultimoHeartbeatJuego = now;
+  for (uint8_t i = 0; i < NUM_SENSORES; i++) {
+    enviarDato(dedos[i], estadoConfirmado[i]);
+    ultimoEstadoEnviado[i] = estadoConfirmado[i];
+  }
 }

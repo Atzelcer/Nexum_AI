@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NEXUM AI · Arquitecto 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css?v=11">
+    <link rel="stylesheet" href="../../shared/module-wheel.css?v=9">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="bootError" class="boot-error" hidden role="alert"></div>
+    <div class="app-frame">
+      <header class="lab-nav">
+        <a class="back-link" href="../../index.html">NEXUM <span class="brand-ai">AI</span></a>
+        <div class="lab-nav-center">
+          <p class="lab-kicker">Modalidad 02</p>
+          <h1>Arquitecto 3D</h1>
+        </div>
+        <div class="lab-nav-actions">
+          <button id="resetViewBtn" type="button">Vista inicial</button>
+          <button id="helpBtn" type="button">Ayuda</button>
+          <button id="addVolumeBtn" type="button">+ Modulo</button>
+          <button id="demoBtn" type="button" class="accent">Demo</button>
+          <a class="nav-close" href="/index.html">Cerrar</a>
+        </div>
+      </header>
+
+      <div class="lab-grid">
+        <section class="stage" aria-label="Lienzo Three.js">
+          <div id="sceneHost" class="scene-host">
+            <div class="stage-atmosphere" aria-hidden="true"></div>
+
+            <aside class="vision-pip is-off" id="visionPip" aria-label="Camara espacial">
+              <div class="vision-pip-head">
+                <strong><span class="pip-live-dot" aria-hidden="true"></span> Vision</strong>
+                <span id="visionConfidence">apagada</span>
+              </div>
+              <div class="vision-pip-frame">
+                <video id="visionVideo" playsinline muted aria-hidden="true"></video>
+                <canvas id="visionCanvas" aria-hidden="true"></canvas>
+                <div class="vision-pip-guide" aria-hidden="true"></div>
+              </div>
+              <button id="pipStartBtn" type="button" class="pip-start">Activar camara</button>
+              <div class="hand-live" aria-label="Manos detectadas">
+                <span id="handHudLeft" class="hand-chip">Izq: —</span>
+                <span id="handHudRight" class="hand-chip">Der: —</span>
+              </div>
+              <p id="visionStatus" class="vision-pip-note">Pinza izq = siguiente modulo</p>
+              <p id="aimLabel" class="vision-aim-label">Junta pulgar+indice para elegir en orden</p>
+            </aside>
+
+            <div class="stage-overlay top-left">
+              <p id="modelStatus" class="model-status">Maqueta modular · gestos con camara en tiempo real.</p>
+              <div class="pill-row">
+                <span id="loadBadge" class="pill">Maqueta: lista</span>
+                <span id="cameraBadge" class="pill">Camara: apagada</span>
+                <span id="mlBadge" class="pill">IA: —</span>
+                <span id="modeBadge" class="pill">Modo: edicion</span>
+              </div>
+              <div class="hint-strip" id="hintStrip" aria-live="polite">
+                <span class="hint-chip">1. Activa camara</span>
+                <span class="hint-chip">2. Pinza izq elige</span>
+                <span class="hint-chip">3. Palma der mueve</span>
+              </div>
+              <div class="selection-row">
+                <span id="selectionLabel" class="selection-pill">Sin seleccion</span>
+                <span id="objectInfo" class="object-info">—</span>
+              </div>
+            </div>
+
+            <div class="stage-overlay top-right">
+              <div class="command-hud" id="commandHud" data-mode="idle">
+                <p class="command-kicker">Comando activo</p>
+                <p id="commandName" class="command-name">reposo</p>
+                <p id="commandGesture" class="command-gesture">—</p>
+                <div class="command-bar" aria-hidden="true"><span></span></div>
+              </div>
+            </div>
+
+            <div id="gestureToast" class="gesture-toast" hidden aria-live="polite"></div>
+
+            <div class="stage-overlay bottom">
+              <div class="stage-dock" role="toolbar" aria-label="Herramientas de escena">
+                <div class="dock-group" aria-label="Herramienta">
+                  <button type="button" class="dock-btn tool-tab is-active" data-tool="move" title="Mover (1)"><span aria-hidden="true">✥</span><em>Mover</em></button>
+                  <button type="button" class="dock-btn tool-tab" data-tool="lift" title="Subir / bajar (2)"><span aria-hidden="true">↕</span><em>Subir</em></button>
+                  <button type="button" class="dock-btn tool-tab" data-tool="rotate" title="Rotar (3)"><span aria-hidden="true">↻</span><em>Rotar</em></button>
+                  <button type="button" class="dock-btn tool-tab" data-tool="scale" title="Escalar (4)"><span aria-hidden="true">⤢</span><em>Escalar</em></button>
+                </div>
+                <span class="dock-sep" aria-hidden="true"></span>
+                <div class="dock-group" aria-label="Vista">
+                  <button type="button" class="dock-btn view-btn is-active" data-view="perspectiva" title="Vista 3D"><span aria-hidden="true">◇</span><em>3D</em></button>
+                  <button type="button" class="dock-btn view-btn" data-view="planta" title="Vista en planta"><span aria-hidden="true">▦</span><em>Planta</em></button>
+                  <button type="button" class="dock-btn view-btn" data-view="frente" title="Vista frontal"><span aria-hidden="true">▭</span><em>Frente</em></button>
+                  <button type="button" class="dock-btn view-btn" data-view="lado" title="Vista lateral"><span aria-hidden="true">◫</span><em>Lado</em></button>
+                </div>
+                <span class="dock-sep" aria-hidden="true"></span>
+                <button type="button" id="snapshotBtn" class="dock-btn" title="Guardar captura PNG"><span aria-hidden="true">◉</span><em>Captura</em></button>
+              </div>
+
+              <span id="hudFps" class="fps-pill">—</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="rail" aria-label="Controles">
+          <section class="rail-block project-card">
+            <div class="project-head">
+              <div>
+                <p class="rail-kicker">Proyecto</p>
+                <h2>Casa modular</h2>
+              </div>
+              <span id="saveState" class="save-state">Sin guardar</span>
+            </div>
+            <div class="project-stats">
+              <div><strong id="statModules">0</strong><span>modulos</span></div>
+              <div><strong id="statArea">0</strong><span>m² en planta</span></div>
+              <div><strong id="statHeight">0</strong><span>altura max (m)</span></div>
+            </div>
+            <div class="project-actions">
+              <button id="saveLayoutBtn" type="button" class="primary">Guardar</button>
+              <button id="loadLayoutBtn" type="button">Cargar</button>
+              <button id="resetLayoutBtn" type="button">Restablecer</button>
+              <button id="exportLayoutBtn" type="button" class="ghost">Exportar JSON</button>
+              <button id="importLayoutBtn" type="button" class="ghost">Importar JSON</button>
+            </div>
+            <input id="importLayoutInput" type="file" accept="application/json,.json" hidden>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Camara espacial</h2>
+              <span class="section-hint">MediaPipe · 2 manos</span>
+            </div>
+            <div class="action-stack camera-actions">
+              <button id="startCameraBtn" type="button" class="primary wide">Activar camara</button>
+              <button id="stopCameraBtn" type="button" class="ghost wide" disabled>Detener</button>
+            </div>
+            <p class="rail-note">Mano izquierda elige el modulo · mano derecha lo mueve, eleva o rota.</p>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Modulos</h2>
+              <div class="mini-nav">
+                <button id="prevAssetBtn" type="button" title="Anterior (Shift+Tab)" aria-label="Modulo anterior">◀</button>
+                <button id="nextAssetBtn" type="button" title="Siguiente (Tab)" aria-label="Modulo siguiente">▶</button>
+              </div>
+            </div>
+            <div id="modulePicker" class="module-picker" role="listbox" aria-label="Modulos de la maqueta"></div>
+            <div class="add-row">
+              <select id="addKindSelect" aria-label="Tipo de modulo">
+                <option value="sala">🛋 Sala</option>
+                <option value="cocina">🍳 Cocina</option>
+                <option value="dormitorio">🛏 Dormitorio</option>
+                <option value="terraza">☀ Terraza</option>
+                <option value="escalera">🪜 Escalera</option>
+                <option value="modulo" selected>📦 Volumen libre</option>
+              </select>
+              <button id="addKindBtn" type="button">Añadir</button>
+            </div>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Inspector</h2>
+              <span id="transformModeBadge" class="section-hint">Tool: Mover XZ</span>
+            </div>
+            <p id="inspectorEmpty" class="inspector-empty">Selecciona un modulo en la escena, en la lista o con la pinza izquierda.</p>
+            <div id="inspector" class="inspector" hidden>
+              <label class="insp-name">
+                <span>Nombre</span>
+                <input id="inspName" maxlength="24" spellcheck="false">
+              </label>
+              <p id="inspDims" class="insp-dims">—</p>
+              <div class="insp-xyz">
+                <label><span>X</span><input id="inspX" type="number" step="0.5"></label>
+                <label><span>Y</span><input id="inspY" type="number" step="0.25"></label>
+                <label><span>Z</span><input id="inspZ" type="number" step="0.5"></label>
+              </div>
+              <label class="insp-range">
+                <span>Rotacion</span>
+                <input id="inspRot" type="range" min="0" max="355" step="5">
+                <output id="inspRotOut">0°</output>
+              </label>
+              <label class="insp-range">
+                <span>Escala</span>
+                <input id="inspScale" type="range" min="30" max="300" step="5">
+                <output id="inspScaleOut">100%</output>
+              </label>
+            </div>
+            <div class="button-grid object-actions">
+              <button id="duplicateBtn" type="button">Duplicar</button>
+              <button id="snapBtn" type="button">Alinear</button>
+              <button id="undoBtn" type="button">Deshacer</button>
+              <button id="deleteBtn" type="button" class="danger">Eliminar</button>
+            </div>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Modo de aplicacion</h2>
+            </div>
+            <div class="mode-tabs" role="tablist">
+              <button type="button" class="mode-tab is-active" data-mode="edicion">Edicion</button>
+              <button type="button" class="mode-tab" data-mode="navegacion">Navegacion</button>
+              <button type="button" class="mode-tab" data-mode="vista_previa">Vista previa</button>
+            </div>
+          </section>
+
+          <section class="rail-block">
+            <div class="section-head">
+              <h2>Mapa de gestos</h2>
+              <span class="section-hint">Se ilumina en vivo</span>
+            </div>
+            <div class="gesture-grid" id="gestureGrid">
+              <article class="gesture-card" data-cmd="seleccionar"><span class="gc-ico" aria-hidden="true">◎</span><div><span class="gc-finger">Pinza izq</span><strong>Elegir modulo</strong></div></article>
+              <article class="gesture-card" data-cmd="mover"><span class="gc-ico gc-ico--cyan" aria-hidden="true">↔</span><div><span class="gc-finger">Palma der</span><strong>Mover lateral</strong></div></article>
+              <article class="gesture-card" data-cmd="elevar"><span class="gc-ico gc-ico--violet" aria-hidden="true">↕</span><div><span class="gc-finger">Palma ↑↓</span><strong>Subir / bajar</strong></div></article>
+              <article class="gesture-card" data-cmd="rotar"><span class="gc-ico gc-ico--teal" aria-hidden="true">↻</span><div><span class="gc-finger">Indice der</span><strong>Rotar objeto</strong></div></article>
+              <article class="gesture-card combo" data-cmd="transformar"><span class="gc-ico" aria-hidden="true">⧉</span><div><span class="gc-finger">2 pinzas</span><strong>Escalar</strong></div></article>
+              <article class="gesture-card combo" data-cmd="orbitar"><span class="gc-ico" aria-hidden="true">◉</span><div><span class="gc-finger">2 palmas</span><strong>Orbitar</strong></div></article>
+              <article class="gesture-card" data-cmd="duplicar"><span class="gc-ico" aria-hidden="true">V</span><div><span class="gc-finger">Paz der</span><strong>Duplicar</strong></div></article>
+              <article class="gesture-card" data-cmd="confirmar"><span class="gc-ico" aria-hidden="true">■</span><div><span class="gc-finger">Punio der</span><strong>Confirmar</strong></div></article>
+              <article class="gesture-card combo" data-cmd="cancelar"><span class="gc-ico" aria-hidden="true">×</span><div><span class="gc-finger">Punio izq</span><strong>Cancelar</strong></div></article>
+              <article class="gesture-card" data-cmd="apuntar"><span class="gc-ico" aria-hidden="true">→</span><div><span class="gc-finger">Posicion IA</span><strong>Apuntar zona</strong></div></article>
+            </div>
+            <p id="lastEvent" class="rail-note event-log">Activa la camara para empezar</p>
+          </section>
+
+          <details class="rail-block rail-details rail-block--last">
+            <summary>
+              <span>IA · entrenar gestos</span>
+              <span id="mlModeHint" class="section-hint">14 clases</span>
+            </summary>
+            <p id="mlStatus" class="rail-note">Dataset listo: 14 gestos × 10 000 muestras. El panel usa heurística en vivo + IA de posiciones.</p>
+            <label class="record-label" for="recordGestureSelect">Grabar gesto</label>
+            <select id="recordGestureSelect" class="record-select" aria-label="Gesto a grabar">
+              <option value="pinza_izq">Pinza izq — seleccionar</option>
+              <option value="mano_abierta_izq">Mano abierta izq — preview</option>
+              <option value="indice_der">Indice der — rotar</option>
+              <option value="palma_slide_der">Palma der lateral — mover</option>
+              <option value="palma_elev_der">Palma der vertical — elevar</option>
+              <option value="pinza_der">Pinza der — mover aim</option>
+              <option value="paz_der">Paz der — duplicar</option>
+              <option value="dos_pinzas">2 pinzas — transformar</option>
+              <option value="dos_palmas">2 palmas — orbitar</option>
+              <option value="punio_der">Punio der — confirmar</option>
+              <option value="punio_izq">Punio izq — cancelar</option>
+              <option value="posicion_izq">Posicion izq — Sala</option>
+              <option value="posicion_centro">Posicion centro — Cocina</option>
+              <option value="posicion_der">Posicion der — Escalera</option>
+            </select>
+            <div class="action-stack">
+              <button id="recordSampleBtn" type="button" class="ghost wide">Grabar 3 s</button>
+            </div>
+            <p id="recordStatus" class="rail-note">Servidor: <code>python ml/collect_vision.py</code> (:8091)</p>
+          </details>
+        </aside>
+      </div>
+    </div>
+
+    <div id="helpOverlay" class="help-overlay" hidden>
+      <div class="help-card" role="dialog" aria-labelledby="helpTitle">
+        <div class="help-head">
+          <h2 id="helpTitle">Controles Arquitecto 3D</h2>
+          <button id="helpCloseBtn" type="button" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="help-grid">
+          <section>
+            <h3>Camara (2 manos)</h3>
+            <ul>
+              <li>Pinza izquierda (pulgar+indice) → siguiente modulo en orden</li>
+              <li>Mano izq abierta → previsualiza el proximo</li>
+              <li>Indice derecho girando → rotar modulo</li>
+              <li>Palma derecha ←→ → mover en horizontal (X)</li>
+              <li>Palma derecha ↑↓ → subir / bajar</li>
+              <li>V derecha → duplicar</li>
+              <li>2 pinzas → escalar + rotar</li>
+              <li>2 palmas → orbitar escena</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Mouse y teclado</h3>
+            <ul>
+              <li>Clic + arrastrar modulo</li>
+              <li>Flechas mover · Shift+flechas altura</li>
+              <li>R / Q rotar · + / - escalar</li>
+              <li>G alinear · Tab cambiar modulo</li>
+              <li>Ctrl+D duplicar · Supr eliminar</li>
+              <li>Ctrl+Z deshacer · Ctrl+S guardar</li>
+              <li>1-4 herramientas · V / P / F / L vistas</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.NEXUM_ORBIT = {
+        current: "arquitecto",
+        fabDark: true,
+        paths: {
+          inicio: "/index.html",
+          computador: "/modulo_teclado/laboratorio-web/",
+          arquitecto: "/modulo_arquitecto/panel/",
+          game: "/modulo_game/panel/"
+        },
+        onAjustes() {
+          document.querySelector(".rail")?.scrollTo({ top: 0, behavior: "smooth" });
+          document.querySelector("#startCameraBtn")?.focus();
+        }
+      };
+    </script>
+    <script src="../../shared/module-wheel.js?v=9"></script>
+    <script type="module" src="./app.js?v=26"></script>
+    <script>
+      window.addEventListener("error", (event) => {
+        const box = document.querySelector("#bootError");
+        if (!box) return;
+        box.hidden = false;
+        box.textContent = event.message || "Error al cargar el panel";
+      });
+    </script>
+  </body>
+</html>
