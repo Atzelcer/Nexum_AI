@@ -121,6 +121,17 @@ const state = {
 };
 
 const LAYOUT_KEY = "nexum_arquitecto_layout_v1";
+const dbSession = window.NexumDB?.createSession("arquitecto") || null;
+const COMMAND_GESTURES = {
+  seleccionar: "pinza_izq",
+  preview_modulo: "mano_abierta_izq",
+  orbitar: "dos_palmas",
+  transformar: "dos_pinzas",
+  rotar: "indice_der",
+  elevar: "palma_elev_der",
+  mover: "palma_slide_der"
+};
+let lastLoggedCommand = "reposo";
 const KIND_LABELS = {
   sala: "Sala",
   cocina: "Cocina",
@@ -214,7 +225,17 @@ function updateHintStrip(cameraOn) {
        <span class="hint-chip">3. Palma der mueve</span>`;
 }
 
+function logCommand(name) {
+  if (name === lastLoggedCommand) return;
+  lastLoggedCommand = name;
+  if (!dbSession || !name || name === "reposo") return;
+  const extra = { parametrosEjecutados: { vista: state.appMode || "edicion" } };
+  if (selected?.userData?.label) extra.codigoObjetivoAfectado = selected.userData.label;
+  dbSession.log(name, COMMAND_GESTURES[name] || "interfaz_panel", extra);
+}
+
 function highlightCommand(name) {
+  logCommand(name);
   const display = name === "preview_modulo" ? "seleccionar" : name === "ciclar_modulo" ? "seleccionar" : name;
   document.querySelectorAll("#gestureGrid .gesture-card").forEach((card) => {
     card.classList.toggle("is-active", card.dataset.cmd === display && display !== "reposo");
@@ -931,7 +952,7 @@ function nextModuleName(kind) {
   return `${base} ${n}`;
 }
 
-function saveLayoutLocal() {
+function saveMaqueta() {
   const data = { version: 1, savedAt: new Date().toISOString(), modules: serializeLayout() };
   try {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(data));
@@ -944,14 +965,47 @@ function saveLayoutLocal() {
   if (els.loadLayoutBtn) els.loadLayoutBtn.textContent = "Cargar guardada";
   setLast(`Maqueta guardada (${data.modules.length} modulos)`);
   showGestureToast("Maqueta guardada", 900);
+  saveLayoutRemote(data.modules);
 }
 
-function loadLayoutLocal() {
-  let data = null;
+async function saveLayoutRemote(modules) {
+  if (!dbSession) return;
+  const code = dbSession.code || await dbSession.start();
+  if (!code) return;
+  const r = (v) => Math.round(v * 100) / 100;
+  const cam = camera && controls
+    ? {
+        posicion: { x: r(camera.position.x), y: r(camera.position.y), z: r(camera.position.z) },
+        objetivo: { x: r(controls.target.x), y: r(controls.target.y), z: r(controls.target.z) }
+      }
+    : {};
   try {
-    data = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null");
+    await window.NexumDB.saveScene(code, "Maqueta NEXUM", modules, cam);
+    setLast(`Maqueta guardada en MongoDB (${modules.length} modulos)`);
+  } catch (err) {
+    setLast(`Guardada solo en este navegador: ${err?.message || err}`);
+  }
+}
+
+async function loadLayoutRemote() {
+  if (!window.NexumDB) return null;
+  try {
+    const scene = await window.NexumDB.latestScene();
+    if (!scene?.objetosEscena?.length) return null;
+    return { modules: scene.objetosEscena, savedAt: scene.fechaActualizacion };
   } catch (_err) {
-    data = null;
+    return null;
+  }
+}
+
+async function loadMaqueta() {
+  let data = await loadLayoutRemote();
+  if (!data) {
+    try {
+      data = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null");
+    } catch (_err) {
+      data = null;
+    }
   }
   if (!data?.modules?.length) {
     setLast("No hay una maqueta guardada en este navegador");
@@ -1410,7 +1464,7 @@ function onPointerUp(event) {
 function onKeyDown(event) {
   if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
   const k = event.key.toLowerCase();
-  if (k === "s" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveLayoutLocal(); return; }
+  if (k === "s" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveMaqueta(); return; }
   if (!event.ctrlKey && !event.metaKey && !event.altKey) {
     const views = { v: "perspectiva", p: "planta", f: "frente", l: "lado" };
     if (views[k]) { setView(views[k]); return; }
@@ -2359,8 +2413,8 @@ function wireUi() {
   els.addVolumeBtn?.addEventListener("click", () => addVolumeModule());
   els.addKindBtn?.addEventListener("click", () => addVolumeModule());
   els.snapshotBtn?.addEventListener("click", captureSnapshot);
-  els.saveLayoutBtn?.addEventListener("click", saveLayoutLocal);
-  els.loadLayoutBtn?.addEventListener("click", loadLayoutLocal);
+  els.saveLayoutBtn?.addEventListener("click", saveMaqueta);
+  els.loadLayoutBtn?.addEventListener("click", loadMaqueta);
   els.resetLayoutBtn?.addEventListener("click", resetLayout);
   els.exportLayoutBtn?.addEventListener("click", exportLayoutJson);
   els.importLayoutBtn?.addEventListener("click", () => els.importLayoutInput?.click());
@@ -2419,6 +2473,10 @@ function boot() {
     setLast("Listo — pinza izq (pulgar+indice) elige modulos: Sala, Cocina, Dormitorio…");
   } catch (err) {
     showBootError(`Error escena 3D: ${err?.message || err}`);
+  }
+  if (dbSession) {
+    dbSession.start();
+    window.addEventListener("pagehide", () => dbSession.end({}, {}, { useBeacon: true }));
   }
 }
 

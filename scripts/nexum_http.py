@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import sys
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,7 +13,10 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from pymongo.errors import PyMongoError
+
 import nexum_auth_store
+import nexum_db
 import nexum_input_control
 
 PORT = 8090
@@ -56,30 +60,126 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/api/auth/health":
-            db_path = nexum_auth_store.ensure_ready()
-            self._json(
-                200,
-                {
-                    "ok": True,
-                    "store": "usuarios",
-                    "path": str(db_path.relative_to(ROOT)).replace("\\", "/"),
-                },
-            )
+            ready = nexum_auth_store.ensure_ready()
+            self._json(200 if ready else 503, {
+                "ok": ready,
+                "store": "mongodb",
+                "database": nexum_db.DB_NAME,
+                "uri": nexum_db.safe_uri(),
+            })
+            return
+        if path == "/api/db/estado":
+            info = nexum_db.status()
+            self._json(200 if info["connected"] else 503, {"ok": info["connected"], **info})
+            return
+        if path == "/api/arquitecto/escenas/ultima":
+            self._db_call(lambda: {"escena": nexum_db.latest_scene()})
             return
         super().do_GET()
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path == "/api/auth/login":
-            self._auth_login()
-            return
-        if path == "/api/auth/register":
-            self._auth_register()
-            return
-        if path == "/api/vision/cursor":
-            self._vision_cursor()
+        routes = {
+            "/api/auth/login": self._auth_login,
+            "/api/auth/register": self._auth_register,
+            "/api/vision/cursor": self._vision_cursor,
+            "/api/sesiones/iniciar": self._session_start,
+            "/api/sesiones/finalizar": self._session_end,
+            "/api/historial": self._history,
+            "/api/arquitecto/escenas": self._scene_save,
+        }
+        route = routes.get(path)
+        if route:
+            route()
             return
         self.send_error(404, "Not Found")
+
+    def _db_call(self, fn, status: int = 200) -> None:
+        try:
+            self._json(status, {"ok": True, **fn()})
+        except ValueError as exc:
+            self._json(400, {"ok": False, "error": str(exc)})
+        except PyMongoError as exc:
+            self._json(503, {"ok": False, "error": f"MongoDB: {exc}"})
+
+    def _modalidad(self, data: dict) -> str:
+        mod = str(data.get("modalidad") or "")
+        if mod not in nexum_db.MODALIDADES:
+            raise ValueError("modalidad invalida (hibrida, arquitecto, videojuego)")
+        return mod
+
+    def _session_start(self) -> None:
+        data = self._read_json()
+
+        def run():
+            mod = self._modalidad(data)
+            extra = data.get("datos") if isinstance(data.get("datos"), dict) else {}
+            usuario = data.get("usuario") if isinstance(data.get("usuario"), dict) else None
+            if mod == "videojuego" and usuario and usuario.get("id"):
+                extra = {**extra, "codigoPerfil": f"PER-{usuario['id']}"}
+            return {"codigoSesion": nexum_db.start_session(mod, extra, wait=True)}
+
+        self._db_call(run, 201)
+
+    def _session_end(self) -> None:
+        data = self._read_json()
+
+        def run():
+            mod = self._modalidad(data)
+            code = str(data.get("codigoSesion") or "")
+            if not code:
+                raise ValueError("falta codigoSesion")
+            extra = data.get("datos") if isinstance(data.get("datos"), dict) else {}
+            closed = nexum_db.end_session(mod, code, extra, wait=True)
+            usuario = data.get("usuario") if isinstance(data.get("usuario"), dict) else None
+            acciones = data.get("acciones") if isinstance(data.get("acciones"), dict) else {}
+            if closed and mod == "videojuego" and usuario and usuario.get("id"):
+                nexum_db.update_player_profile(
+                    code, f"PER-{usuario['id']}", str(usuario.get("name") or usuario["id"]),
+                    {str(k): int(v) for k, v in acciones.items() if isinstance(v, (int, float))},
+                )
+            return {"finalizada": closed}
+
+        self._db_call(run)
+
+    def _history(self) -> None:
+        data = self._read_json()
+
+        def run():
+            mod = self._modalidad(data)
+            code = str(data.get("codigoSesion") or "")
+            eventos = data.get("eventos") if isinstance(data.get("eventos"), list) else []
+            if not code:
+                raise ValueError("falta codigoSesion")
+            docs = []
+            for ev in eventos[:500]:
+                if not isinstance(ev, dict) or not ev.get("comando"):
+                    continue
+                fields = dict(ev)
+                stamp = ev.get("fecha")
+                if isinstance(stamp, (int, float)):
+                    fields["fechaEjecucion"] = datetime.fromtimestamp(stamp / 1000, timezone.utc)
+                if not isinstance(fields.get("parametrosEjecutados"), dict):
+                    fields.pop("parametrosEjecutados", None)
+                docs.append(nexum_db.history_doc(mod, code, str(ev.get("gesto") or "desconocido"),
+                                                 str(ev["comando"]), fields))
+            return {"registrados": nexum_db.log_commands(mod, docs)}
+
+        self._db_call(run, 201)
+
+    def _scene_save(self) -> None:
+        data = self._read_json()
+
+        def run():
+            code = str(data.get("codigoSesion") or "")
+            if not code:
+                raise ValueError("falta codigoSesion")
+            objetos = data.get("objetosEscena") if isinstance(data.get("objetosEscena"), list) else []
+            camara = data.get("camaraActiva") if isinstance(data.get("camaraActiva"), dict) else {}
+            nombre = str(data.get("nombreEscena") or "Escena NEXUM")[:80]
+            return {"codigoEscena": nexum_db.save_scene(code, nombre, objetos, camara)}
+
+        self._db_call(run, 201)
 
     def _vision_cursor(self) -> None:
         data = self._read_json()
@@ -149,12 +249,13 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
-    db_path = nexum_auth_store.ensure_ready()
+    ready = nexum_auth_store.ensure_ready()
     handler = functools.partial(Handler, directory=str(ROOT))
     ThreadingHTTPServer.allow_reuse_address = True
     with ThreadingHTTPServer((HOST, PORT), handler) as httpd:
         print(f"NEXUM HTTP http://{HOST}:{PORT}/  (COOP/COEP solo emulador)", flush=True)
-        print(f"Auth DB: {db_path}", flush=True)
+        estado = "conectada" if ready else "SIN CONEXION (se reintenta en cada peticion)"
+        print(f"MongoDB {nexum_db.safe_uri()}/{nexum_db.DB_NAME}: {estado}", flush=True)
         print(f"API login: POST http://{HOST}:{PORT}/api/auth/login", flush=True)
         print(f"Juego: http://{HOST}:{PORT}/modulo_game/panel/", flush=True)
         httpd.serve_forever()

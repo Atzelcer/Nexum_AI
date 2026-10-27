@@ -541,7 +541,7 @@ const collections = [
     ["codigoConfiguracion", "motorDestino", "configuracionActiva", "fechaRegistro"],
     {
       codigoConfiguracion: S.str,
-      motorDestino: { ...S.str, enum: ["unity"] },
+      motorDestino: { ...S.str, enum: ["unity", "navegador"] },
       sensibilidadMovimiento: { ...S.num, minimum: 0 },
       ventanaComboMs: { ...S.int, minimum: 0 },
       magnitudAtaqueDefault: { ...S.num, minimum: 0 },

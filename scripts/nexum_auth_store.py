@@ -4,33 +4,21 @@ import hashlib
 import json
 import re
 import secrets
-import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "project" / "database" / "runtime" / "usuarios.json"
-_LOCK = threading.Lock()
+from pymongo.errors import DuplicateKeyError, PyMongoError
+
+import nexum_db
+
+LEGACY_JSON = nexum_db.ROOT / "project" / "database" / "runtime" / "usuarios.json"
+UNAVAILABLE = "Base de datos no disponible. Inicia MongoDB e intenta de nuevo."
 
 _SEED_USERS = (
-    {
-        "nombreUsuario": "Samuel",
-        "correoUsuario": "samuel@gmail.com",
-        "contrasena": "1234",
-        "tipoUsuario": "registrado",
-    },
-    {
-        "nombreUsuario": "Atzel",
-        "correoUsuario": "atzel@nexum.ai",
-        "contrasena": "1234",
-        "tipoUsuario": "registrado",
-    },
+    {"nombreUsuario": "Samuel", "correoUsuario": "samuel@gmail.com", "contrasena": "1234"},
+    {"nombreUsuario": "Atzel", "correoUsuario": "atzel@nexum.ai", "contrasena": "1234"},
 )
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
@@ -49,90 +37,108 @@ def _slug_code(email: str) -> str:
     return f"usr-{base}"[:64]
 
 
-public_keys = ("codigoUsuario", "nombreUsuario", "correoUsuario", "tipoUsuario", "estadoUsuario", "fechaRegistro")
+def _users():
+    return nexum_db.db()["usuarios"]
 
 
 def public_user(user: dict[str, Any]) -> dict[str, Any]:
-    return {k: user.get(k) for k in public_keys}
+    fecha = user.get("fechaRegistro")
+    return {
+        "codigoUsuario": user.get("codigoUsuario"),
+        "nombreUsuario": user.get("nombreUsuario"),
+        "correoUsuario": user.get("correoUsuario"),
+        "tipoUsuario": user.get("tipoUsuario"),
+        "estadoUsuario": user.get("estadoUsuario"),
+        "fechaRegistro": fecha.isoformat() if isinstance(fecha, datetime) else fecha,
+    }
 
 
-def _empty_db() -> dict[str, Any]:
-    return {"version": 1, "usuarios": []}
+def _new_user(name: str, email: str, salt: str, password_hash: str, fecha: datetime | None = None) -> dict[str, Any]:
+    return {
+        "codigoUsuario": _slug_code(email),
+        "nombreUsuario": name[:40],
+        "correoUsuario": email,
+        "tipoUsuario": "registrado",
+        "estadoUsuario": "activo",
+        "fechaRegistro": fecha or nexum_db.now(),
+        "salt": salt,
+        "passwordHash": password_hash,
+    }
 
 
-def _ensure_db() -> dict[str, Any]:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not DB_PATH.exists():
-        data = _empty_db()
-    else:
-        try:
-            data = json.loads(DB_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = _empty_db()
+def _insert(user: dict[str, Any]) -> dict[str, Any]:
+    try:
+        _users().insert_one(user)
+    except DuplicateKeyError:
+        if _users().find_one({"correoUsuario": user["correoUsuario"]}):
+            raise
+        user["codigoUsuario"] = f"{user['codigoUsuario'][:58]}-{secrets.token_hex(2)}"
+        _users().insert_one(user)
+    return user
 
-    if not isinstance(data, dict):
-        data = _empty_db()
-    data.setdefault("version", 1)
-    data.setdefault("usuarios", [])
-    if not isinstance(data["usuarios"], list):
-        data["usuarios"] = []
 
-    changed = False
+def seed_users() -> int:
+    created = 0
     for seed in _SEED_USERS:
-        email = seed["correoUsuario"].lower()
-        if any(str(u.get("correoUsuario", "")).lower() == email for u in data["usuarios"]):
+        email = seed["correoUsuario"]
+        if _users().find_one({"correoUsuario": email}):
             continue
         salt, password_hash = _hash_password(seed["contrasena"])
-        data["usuarios"].append(
-            {
-                "codigoUsuario": _slug_code(email),
-                "nombreUsuario": seed["nombreUsuario"],
-                "correoUsuario": email,
-                "tipoUsuario": seed["tipoUsuario"],
-                "estadoUsuario": "activo",
-                "fechaRegistro": _now_iso(),
-                "salt": salt,
-                "passwordHash": password_hash,
-            }
-        )
-        changed = True
-
-    if changed or not DB_PATH.exists():
-        _save_db(data)
-    return data
+        _insert(_new_user(seed["nombreUsuario"], email, salt, password_hash))
+        created += 1
+    return created
 
 
-def _save_db(data: dict[str, Any]) -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = DB_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(DB_PATH)
+def import_legacy_json(path: Path = LEGACY_JSON) -> int:
+    if not path.exists():
+        return 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    imported = 0
+    for item in data.get("usuarios", []) if isinstance(data, dict) else []:
+        email = str(item.get("correoUsuario", "")).strip().lower()
+        if not email or not item.get("salt") or not item.get("passwordHash"):
+            continue
+        if _users().find_one({"correoUsuario": email}):
+            continue
+        try:
+            fecha = datetime.fromisoformat(str(item.get("fechaRegistro")))
+        except ValueError:
+            fecha = None
+        user = _new_user(str(item.get("nombreUsuario") or email.split("@")[0]), email,
+                         item["salt"], item["passwordHash"], fecha)
+        if item.get("estadoUsuario") == "inactivo":
+            user["estadoUsuario"] = "inactivo"
+        _insert(user)
+        imported += 1
+    return imported
 
 
-def find_user(identity: str, data: dict[str, Any] | None = None) -> dict[str, Any] | None:
+def find_user(identity: str) -> dict[str, Any] | None:
     key = identity.strip().lower()
     if not key:
         return None
-    db = data if data is not None else _ensure_db()
-    for user in db["usuarios"]:
-        if user.get("estadoUsuario") == "inactivo":
-            continue
-        email = str(user.get("correoUsuario", "")).lower()
-        name = str(user.get("nombreUsuario", "")).strip().lower()
-        if email == key or name == key:
-            return user
-    return None
+    by_email = _users().find_one({"correoUsuario": key, "estadoUsuario": "activo"})
+    if by_email:
+        return by_email
+    pattern = f"^{re.escape(identity.strip())}$"
+    return _users().find_one({"nombreUsuario": {"$regex": pattern, "$options": "i"}, "estadoUsuario": "activo"})
 
 
 def login(identity: str, password: str) -> tuple[bool, str, dict[str, Any] | None]:
-    with _LOCK:
-        data = _ensure_db()
-        user = find_user(identity, data)
-        if not user:
-            return False, "No hay cuenta con ese nombre/correo. Crea una cuenta.", None
-        if not _verify_password(password, user.get("salt", ""), user.get("passwordHash", "")):
-            return False, "Nombre/correo o contrasena incorrectos.", None
-        return True, "ok", public_user(user)
+    if not ensure_ready():
+        return False, UNAVAILABLE, None
+    try:
+        user = find_user(identity)
+    except PyMongoError:
+        return False, UNAVAILABLE, None
+    if not user:
+        return False, "No hay cuenta con ese nombre/correo. Crea una cuenta.", None
+    if not _verify_password(password, user.get("salt", ""), user.get("passwordHash", "")):
+        return False, "Nombre/correo o contrasena incorrectos.", None
+    return True, "ok", public_user(user)
 
 
 def register(name: str, email: str, password: str) -> tuple[bool, str, dict[str, Any] | None]:
@@ -142,38 +148,32 @@ def register(name: str, email: str, password: str) -> tuple[bool, str, dict[str,
         return False, "Usa un correo valido para crear la cuenta.", None
     if len(password) < 4:
         return False, "La contrasena debe tener al menos 4 caracteres.", None
-
-    with _LOCK:
-        data = _ensure_db()
-        if find_user(email_n, data):
+    if not ensure_ready():
+        return False, UNAVAILABLE, None
+    try:
+        if _users().find_one({"correoUsuario": email_n}):
             return False, "Ese correo ya tiene cuenta. Inicia sesion.", None
-        if find_user(name_n, data) and name_n:
-            existing = find_user(name_n, data)
-            if existing and existing.get("correoUsuario") != email_n:
-                pass
-
         salt, password_hash = _hash_password(password)
-        code = _slug_code(email_n)
-        codes = {u.get("codigoUsuario") for u in data["usuarios"]}
-        if code in codes:
-            code = f"{code}-{secrets.token_hex(2)}"
-
-        user = {
-            "codigoUsuario": code,
-            "nombreUsuario": name_n[:40],
-            "correoUsuario": email_n,
-            "tipoUsuario": "registrado",
-            "estadoUsuario": "activo",
-            "fechaRegistro": _now_iso(),
-            "salt": salt,
-            "passwordHash": password_hash,
-        }
-        data["usuarios"].append(user)
-        _save_db(data)
-        return True, "ok", public_user(user)
+        user = _insert(_new_user(name_n, email_n, salt, password_hash))
+    except DuplicateKeyError:
+        return False, "Ese correo ya tiene cuenta. Inicia sesion.", None
+    except PyMongoError:
+        return False, UNAVAILABLE, None
+    return True, "ok", public_user(user)
 
 
-def ensure_ready() -> Path:
-    with _LOCK:
-        _ensure_db()
-    return DB_PATH
+_seeded = False
+
+
+def ensure_ready() -> bool:
+    global _seeded
+    if not nexum_db.ensure_ready():
+        return False
+    if not _seeded:
+        try:
+            import_legacy_json()
+            seed_users()
+            _seeded = True
+        except PyMongoError:
+            return False
+    return True

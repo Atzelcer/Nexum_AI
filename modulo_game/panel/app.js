@@ -164,6 +164,38 @@ const state = {
 };
 
 const profile = () => PROFILES[state.game.profile] || PROFILES.runGun;
+const dbSession = window.NexumDB?.createSession("videojuego") || null;
+let dbActions = {};
+let dbScore = null;
+
+function gestureFor(input) {
+  if (state.keyHeld.has(input)) return "teclado";
+  if (state.pointerHeld.has(input)) return "pantalla";
+  const map = profile().map;
+  if (input === "derecha" || input === "izquierda") return "indice_izq_lateral";
+  if (input === map.shoot) return "mano_der_abierta";
+  if (input === map.jump) return "punio_der_juego";
+  if (input === map.crouch) return "mano_der_abajo";
+  if (input === map.aimUp) return "mano_der_arriba";
+  if (input === "start" || input === "coin") return state.lastSource === "Cámara" ? "punio_izq_juego" : "interfaz_panel";
+  return "camara";
+}
+
+function recordAction(input) {
+  dbActions[input] = (dbActions[input] || 0) + 1;
+  dbSession?.log(input, gestureFor(input), {
+    magnitudEjecutada: 1,
+    parametrosEjecutados: { juego: state.game.id, perfil: state.game.profile }
+  });
+}
+
+function endDbSession(useBeacon = false) {
+  if (!dbSession?.code) return;
+  const puntuacionSesion = Math.round(dbScore ?? state.session.actions);
+  dbSession.end({ puntuacionSesion }, dbActions, { useBeacon });
+  dbActions = {};
+  dbScore = null;
+}
 
 function loadSettings() {
   try {
@@ -342,6 +374,7 @@ function countAction(input) {
   state.session.actions += 1;
   if (els.hudActions) els.hudActions.textContent = String(state.session.actions);
   pushRibbon(input);
+  recordAction(input);
 }
 
 function pushRibbon(input) {
@@ -471,9 +504,13 @@ function startGame() {
   setStatus("loading");
   setArcadeStatus("Cargando…", false);
   renderLibrary();
+  dbActions = {};
+  dbScore = null;
+  dbSession?.start({ nombrePartida: game.title });
 }
 
 function stopGame({ silent = false } = {}) {
+  endDbSession();
   window.clearTimeout(state.tapTimer);
   cancelCamCountdown();
   releaseAll();
@@ -792,6 +829,7 @@ function wireUi() {
     els.fullscreenBtn.querySelector("em").textContent = on ? "Salir" : "Completa";
   });
 
+  window.addEventListener("pagehide", () => endDbSession(true));
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", () => {
@@ -830,6 +868,7 @@ function wireUi() {
     } else if (msg.type === "nexum-score") {
       if (els.hudScoreChip) els.hudScoreChip.hidden = false;
       if (els.hudScore) els.hudScore.textContent = String(msg.score).padStart(6, "0");
+      if (Number.isFinite(Number(msg.score))) dbScore = Number(msg.score);
       if (els.nowMeta && !state.paused) {
         els.nowMeta.textContent = msg.over ? "Game over · START para seguir" : `Jugando · vidas ${msg.lives}`;
       }

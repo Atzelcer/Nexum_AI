@@ -1,0 +1,2835 @@
+{
+  "database": "nexum_ai",
+  "collections": [
+    {
+      "name": "usuarios",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoUsuario",
+            "nombreUsuario",
+            "correoUsuario",
+            "tipoUsuario",
+            "estadoUsuario",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoUsuario": {
+              "bsonType": "string"
+            },
+            "nombreUsuario": {
+              "bsonType": "string"
+            },
+            "correoUsuario": {
+              "bsonType": "string"
+            },
+            "tipoUsuario": {
+              "bsonType": "string",
+              "enum": [
+                "registrado",
+                "invitado",
+                "sistema"
+              ]
+            },
+            "estadoUsuario": {
+              "bsonType": "string",
+              "enum": [
+                "activo",
+                "inactivo"
+              ]
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            },
+            "salt": {
+              "bsonType": "string"
+            },
+            "passwordHash": {
+              "bsonType": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoUsuario": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "correoUsuario": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "nombreUsuario": 1
+          }
+        },
+        {
+          "key": {
+            "estadoUsuario": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "catalogo_gestos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoGesto",
+            "nombreGesto",
+            "tipoGesto",
+            "activo",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "nombreGesto": {
+              "bsonType": "string"
+            },
+            "tipoGesto": {
+              "bsonType": "string",
+              "enum": [
+                "estatico",
+                "dinamico"
+              ]
+            },
+            "categoriaGesto": {
+              "bsonType": "string",
+              "enum": [
+                "manipulacion",
+                "combate",
+                "navegacion",
+                "escritura"
+              ]
+            },
+            "descripcionGesto": {
+              "bsonType": "string"
+            },
+            "dedosInvolucrados": {
+              "bsonType": "array"
+            },
+            "requiereVision": {
+              "bsonType": "bool"
+            },
+            "requiereInercia": {
+              "bsonType": "bool"
+            },
+            "requiereFusion": {
+              "bsonType": "bool"
+            },
+            "duracionMinimaMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "duracionMaximaMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "umbralConfianza": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "ventanaTemporalMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "secuenciaMovimiento": {
+              "bsonType": "array"
+            },
+            "gestosRelacionados": {
+              "bsonType": "array"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoGesto": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "tipoGesto": 1,
+            "activo": 1
+          }
+        },
+        {
+          "key": {
+            "categoriaGesto": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "modalidades_aplicacion",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoModalidad",
+            "nombreModalidad",
+            "motorDestino",
+            "estadoModalidad",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoModalidad": {
+              "bsonType": "string",
+              "enum": [
+                "arquitecto_tridimensional",
+                "control_videojuego",
+                "interaccion_hibrida"
+              ]
+            },
+            "nombreModalidad": {
+              "bsonType": "string"
+            },
+            "descripcionModalidad": {
+              "bsonType": "string"
+            },
+            "codigoUsuario": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "motorDestino": {
+              "bsonType": "string",
+              "enum": [
+                "threejs",
+                "unity",
+                "navegador"
+              ]
+            },
+            "categoriasComando": {
+              "bsonType": "array"
+            },
+            "gestosPermitidos": {
+              "bsonType": "array"
+            },
+            "coleccionComandos": {
+              "bsonType": "string"
+            },
+            "coleccionSesiones": {
+              "bsonType": "string"
+            },
+            "permiteDosManos": {
+              "bsonType": "bool"
+            },
+            "tiempoDebounceMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "sensibilidadMovimiento": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "estadoModalidad": {
+              "bsonType": "string",
+              "enum": [
+                "activa",
+                "inactiva",
+                "mantenimiento"
+              ]
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoModalidad": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "motorDestino": 1
+          }
+        },
+        {
+          "key": {
+            "estadoModalidad": 1
+          }
+        },
+        {
+          "key": {
+            "codigoUsuario": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "configuracion_guante",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoGuante",
+            "codigoEsp32",
+            "cantidadSensores",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoGuante": {
+              "bsonType": "string"
+            },
+            "codigoEsp32": {
+              "bsonType": "string"
+            },
+            "codigoMultiplexor": {
+              "bsonType": "string"
+            },
+            "cantidadSensores": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "mapaSensores": {
+              "bsonType": "object"
+            },
+            "posicionNeutral": {
+              "bsonType": "object"
+            },
+            "rangosMovimiento": {
+              "bsonType": "object"
+            },
+            "frecuenciaMuestreoHz": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "tipoFiltro": {
+              "bsonType": "string"
+            },
+            "protocoloComunicacion": {
+              "bsonType": "string"
+            },
+            "puertoComunicacion": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "versionFirmware": {
+              "bsonType": "string"
+            },
+            "calibracionEstable": {
+              "bsonType": "bool"
+            },
+            "puntajeCalidad": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "calibracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaCalibracion": {
+              "bsonType": "date"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoGuante": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "calibracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "configuracion_vision",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoCamara",
+            "modeloDeteccion",
+            "configuracionActiva",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoCamara": {
+              "bsonType": "string"
+            },
+            "resolucionCaptura": {
+              "bsonType": "string"
+            },
+            "frecuenciaCapturaFps": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "modeloDeteccion": {
+              "bsonType": "string"
+            },
+            "cantidadManosMaxima": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1,
+              "maximum": 2
+            },
+            "confianzaDeteccion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaSeguimiento": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "espejoHorizontal": {
+              "bsonType": "bool"
+            },
+            "normalizarCoordenadas": {
+              "bsonType": "bool"
+            },
+            "configuracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoCamara": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "configuracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "configuracion_sistema",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoConfiguracion",
+            "modalidadActiva",
+            "configuracionActiva",
+            "fechaActualizacion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "modalidadActiva": {
+              "bsonType": "string"
+            },
+            "desfaseVisionImuMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ]
+            },
+            "tamanoVentanaMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "tamanoBuffer": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "confianzaMinimaGlobal": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "tiempoDebounceGlobalMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "frecuenciaActualizacionHudMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "mostrarTelemetria": {
+              "bsonType": "bool"
+            },
+            "mostrarConfianza": {
+              "bsonType": "bool"
+            },
+            "mostrarHistorial": {
+              "bsonType": "bool"
+            },
+            "ttlTelemetriaDias": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 1
+            },
+            "rutaArchivos": {
+              "bsonType": "string"
+            },
+            "configuracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaActualizacion": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoConfiguracion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "modalidadActiva": 1
+          }
+        },
+        {
+          "key": {
+            "configuracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "modelos_entrenados",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoModelo",
+            "codigoModalidad",
+            "tipoModelo",
+            "estadoModelo",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoModelo": {
+              "bsonType": "string"
+            },
+            "codigoModalidad": {
+              "bsonType": "string"
+            },
+            "nombreModelo": {
+              "bsonType": "string"
+            },
+            "tipoModelo": {
+              "bsonType": "string",
+              "enum": [
+                "clasificador",
+                "lstm",
+                "gru"
+              ]
+            },
+            "versionModelo": {
+              "bsonType": "string"
+            },
+            "precisionModelo": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "gestosEntrenados": {
+              "bsonType": "array"
+            },
+            "estadoModelo": {
+              "bsonType": "string",
+              "enum": [
+                "entrenando",
+                "listo",
+                "archivado"
+              ]
+            },
+            "modeloActivo": {
+              "bsonType": "bool"
+            },
+            "rutaArchivo": {
+              "bsonType": "string"
+            },
+            "fechaEntrenamiento": {
+              "bsonType": "date"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoModelo": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoModalidad": 1,
+            "tipoModelo": 1
+          }
+        },
+        {
+          "key": {
+            "codigoModalidad": 1,
+            "modeloActivo": 1
+          }
+        },
+        {
+          "key": {
+            "estadoModelo": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoComando",
+            "nombreComando",
+            "tipoComando",
+            "activo",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "nombreComando": {
+              "bsonType": "string"
+            },
+            "categoriaComando": {
+              "bsonType": "string",
+              "enum": [
+                "manipulacion",
+                "navegacion"
+              ]
+            },
+            "descripcionComando": {
+              "bsonType": "string"
+            },
+            "tipoComando": {
+              "bsonType": "string",
+              "enum": [
+                "accion",
+                "transformacion",
+                "navegacion"
+              ]
+            },
+            "gestosSugeridos": {
+              "bsonType": "array"
+            },
+            "requiereObjetivoSeleccionado": {
+              "bsonType": "bool"
+            },
+            "ejesPermitidos": {
+              "bsonType": "array"
+            },
+            "parametrosComando": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoComando": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "categoriaComando": 1,
+            "activo": 1
+          }
+        },
+        {
+          "key": {
+            "tipoComando": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_reglas_semanticas",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoRegla",
+            "codigoGesto",
+            "codigoComando",
+            "prioridadRegla",
+            "activo"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoRegla": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "prioridadRegla": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "confianzaMinima": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "estadoAplicacion": {
+              "bsonType": "string",
+              "enum": [
+                "edicion",
+                "navegacion",
+                "vista_previa"
+              ]
+            },
+            "ejeTransformacion": {
+              "bsonType": "string",
+              "enum": [
+                "x",
+                "y",
+                "z",
+                "libre"
+              ]
+            },
+            "parametrosEjecucion": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoRegla": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGesto": 1,
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "prioridadRegla": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_configuracion",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoConfiguracion",
+            "motorDestino",
+            "configuracionActiva",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "motorDestino": {
+              "bsonType": "string",
+              "enum": [
+                "threejs"
+              ]
+            },
+            "gridVisible": {
+              "bsonType": "bool"
+            },
+            "unidadMedida": {
+              "bsonType": "string"
+            },
+            "modoCamara": {
+              "bsonType": "string",
+              "enum": [
+                "orbita",
+                "primera_persona",
+                "ortografica"
+              ]
+            },
+            "snapActivado": {
+              "bsonType": "bool"
+            },
+            "sensibilidadRotacion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "sensibilidadZoom": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "permiteDosManos": {
+              "bsonType": "bool"
+            },
+            "tiempoDebounceMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "configuracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoConfiguracion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "configuracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_sesiones",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoSesion",
+            "codigoGuante",
+            "codigoCamara",
+            "codigoConfiguracion",
+            "fechaInicio",
+            "estadoSesion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGuante": {
+              "bsonType": "string"
+            },
+            "codigoCamara": {
+              "bsonType": "string"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "codigoModeloClasificador": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "fechaInicio": {
+              "bsonType": "date"
+            },
+            "fechaFin": {
+              "bsonType": [
+                "date",
+                "null"
+              ]
+            },
+            "estadoSesion": {
+              "bsonType": "string",
+              "enum": [
+                "activa",
+                "finalizada",
+                "error"
+              ]
+            },
+            "objetosSeleccionados": {
+              "bsonType": "array"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoSesion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGuante": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "codigoCamara": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "estadoSesion": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_muestras",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoMuestra",
+            "codigoSesion",
+            "codigoGesto",
+            "fechaCaptura"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoMuestra": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "fechaCaptura": {
+              "bsonType": "date"
+            },
+            "datosVision": {
+              "bsonType": "object"
+            },
+            "datosInercia": {
+              "bsonType": "object"
+            },
+            "confianzaVision": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaInercia": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaFusion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "etiquetaValidada": {
+              "bsonType": "bool"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoMuestra": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "codigoGesto": 1
+          }
+        },
+        {
+          "key": {
+            "fechaCaptura": -1
+          }
+        },
+        {
+          "key": {
+            "etiquetaValidada": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_historial_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoHistorial",
+            "codigoSesion",
+            "codigoGestoDetectado",
+            "codigoComando",
+            "fechaEjecucion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoHistorial": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGestoDetectado": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "fechaEjecucion": {
+              "bsonType": "date"
+            },
+            "confianzaDeteccion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "codigoObjetivoAfectado": {
+              "bsonType": "string"
+            },
+            "parametrosEjecutados": {
+              "bsonType": "object"
+            },
+            "resultadoEjecucion": {
+              "bsonType": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoHistorial": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "fechaEjecucion": -1
+          }
+        },
+        {
+          "key": {
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "codigoGestoDetectado": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_telemetria",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoTelemetria",
+            "codigoSesion",
+            "tipoTelemetria",
+            "fechaEvento"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoTelemetria": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "tipoTelemetria": {
+              "bsonType": "string",
+              "enum": [
+                "vision",
+                "inercia",
+                "fusion",
+                "render"
+              ]
+            },
+            "fechaEvento": {
+              "bsonType": "date"
+            },
+            "fechaExpiracion": {
+              "bsonType": "date"
+            },
+            "latenciaMs": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "payload": {
+              "bsonType": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoTelemetria": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "tipoTelemetria": 1
+          }
+        },
+        {
+          "key": {
+            "fechaEvento": -1
+          }
+        },
+        {
+          "key": {
+            "fechaExpiracion": 1
+          },
+          "options": {
+            "expireAfterSeconds": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "arquitecto_escenas",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoEscena",
+            "codigoSesion",
+            "nombreEscena",
+            "estadoEscena"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoEscena": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "nombreEscena": {
+              "bsonType": "string"
+            },
+            "objetosEscena": {
+              "bsonType": "array"
+            },
+            "camaraActiva": {
+              "bsonType": "object"
+            },
+            "estadoEscena": {
+              "bsonType": "string",
+              "enum": [
+                "borrador",
+                "activa",
+                "archivada"
+              ]
+            },
+            "fechaActualizacion": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoEscena": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1
+          }
+        },
+        {
+          "key": {
+            "estadoEscena": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoComando",
+            "nombreComando",
+            "tipoAccion",
+            "activo",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "nombreComando": {
+              "bsonType": "string"
+            },
+            "categoriaComando": {
+              "bsonType": "string",
+              "enum": [
+                "combate",
+                "navegacion"
+              ]
+            },
+            "descripcionComando": {
+              "bsonType": "string"
+            },
+            "tipoAccion": {
+              "bsonType": "string",
+              "enum": [
+                "accion",
+                "ataque",
+                "defensa",
+                "movimiento",
+                "habilidad"
+              ]
+            },
+            "gestosSugeridos": {
+              "bsonType": "array"
+            },
+            "magnitudDefault": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "cooldownMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "slotHabilidad": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "parametrosComando": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoComando": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "categoriaComando": 1,
+            "activo": 1
+          }
+        },
+        {
+          "key": {
+            "tipoAccion": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_reglas_semanticas",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoRegla",
+            "codigoGesto",
+            "codigoComando",
+            "prioridadRegla",
+            "activo"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoRegla": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "prioridadRegla": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "confianzaMinima": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "estadoAplicacion": {
+              "bsonType": "string",
+              "enum": [
+                "juego",
+                "menu",
+                "pausa"
+              ]
+            },
+            "ventanaComboMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "parametrosEjecucion": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoRegla": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGesto": 1,
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "prioridadRegla": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_configuracion",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoConfiguracion",
+            "motorDestino",
+            "configuracionActiva",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "motorDestino": {
+              "bsonType": "string",
+              "enum": [
+                "unity",
+                "navegador"
+              ]
+            },
+            "sensibilidadMovimiento": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "ventanaComboMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "magnitudAtaqueDefault": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "mapeoBotones": {
+              "bsonType": "object"
+            },
+            "permiteDosManos": {
+              "bsonType": "bool"
+            },
+            "tiempoDebounceMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "configuracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoConfiguracion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "configuracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_sesiones",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoSesion",
+            "codigoGuante",
+            "codigoCamara",
+            "codigoConfiguracion",
+            "fechaInicio",
+            "estadoSesion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGuante": {
+              "bsonType": "string"
+            },
+            "codigoCamara": {
+              "bsonType": "string"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "codigoModeloClasificador": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "codigoPerfil": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "nombrePartida": {
+              "bsonType": "string"
+            },
+            "fechaInicio": {
+              "bsonType": "date"
+            },
+            "fechaFin": {
+              "bsonType": [
+                "date",
+                "null"
+              ]
+            },
+            "estadoSesion": {
+              "bsonType": "string",
+              "enum": [
+                "activa",
+                "finalizada",
+                "error"
+              ]
+            },
+            "puntuacionSesion": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoSesion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGuante": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "codigoCamara": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "estadoSesion": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_muestras",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoMuestra",
+            "codigoSesion",
+            "codigoGesto",
+            "fechaCaptura"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoMuestra": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "fechaCaptura": {
+              "bsonType": "date"
+            },
+            "datosVision": {
+              "bsonType": "object"
+            },
+            "datosInercia": {
+              "bsonType": "object"
+            },
+            "confianzaVision": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaInercia": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaFusion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "etiquetaValidada": {
+              "bsonType": "bool"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoMuestra": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "codigoGesto": 1
+          }
+        },
+        {
+          "key": {
+            "fechaCaptura": -1
+          }
+        },
+        {
+          "key": {
+            "etiquetaValidada": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_historial_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoHistorial",
+            "codigoSesion",
+            "codigoGestoDetectado",
+            "codigoComando",
+            "fechaEjecucion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoHistorial": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGestoDetectado": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "fechaEjecucion": {
+              "bsonType": "date"
+            },
+            "confianzaDeteccion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "magnitudEjecutada": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "esCombo": {
+              "bsonType": "bool"
+            },
+            "parametrosEjecutados": {
+              "bsonType": "object"
+            },
+            "resultadoEjecucion": {
+              "bsonType": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoHistorial": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "fechaEjecucion": -1
+          }
+        },
+        {
+          "key": {
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "codigoGestoDetectado": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_telemetria",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoTelemetria",
+            "codigoSesion",
+            "tipoTelemetria",
+            "fechaEvento"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoTelemetria": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "tipoTelemetria": {
+              "bsonType": "string",
+              "enum": [
+                "vision",
+                "inercia",
+                "fusion",
+                "input_lag"
+              ]
+            },
+            "fechaEvento": {
+              "bsonType": "date"
+            },
+            "fechaExpiracion": {
+              "bsonType": "date"
+            },
+            "latenciaMs": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "payload": {
+              "bsonType": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoTelemetria": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "tipoTelemetria": 1
+          }
+        },
+        {
+          "key": {
+            "fechaEvento": -1
+          }
+        },
+        {
+          "key": {
+            "fechaExpiracion": 1
+          },
+          "options": {
+            "expireAfterSeconds": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "videojuego_perfil_jugador",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoPerfil",
+            "codigoSesion",
+            "nombreJugador",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoPerfil": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "nombreJugador": {
+              "bsonType": "string"
+            },
+            "nivelExperiencia": {
+              "bsonType": "string"
+            },
+            "combosRegistrados": {
+              "bsonType": "array"
+            },
+            "estadisticasCombate": {
+              "bsonType": "object"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoPerfil": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1
+          }
+        },
+        {
+          "key": {
+            "nombreJugador": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoComando",
+            "nombreComando",
+            "tipoEntrada",
+            "activo",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "nombreComando": {
+              "bsonType": "string"
+            },
+            "categoriaComando": {
+              "bsonType": "string",
+              "enum": [
+                "navegacion",
+                "escritura"
+              ]
+            },
+            "descripcionComando": {
+              "bsonType": "string"
+            },
+            "tipoEntrada": {
+              "bsonType": "string",
+              "enum": [
+                "tecla",
+                "desplazamiento",
+                "confirmacion",
+                "cancelacion"
+              ]
+            },
+            "gestosSugeridos": {
+              "bsonType": "array"
+            },
+            "teclaEquivalente": {
+              "bsonType": "string"
+            },
+            "modoDesplazamiento": {
+              "bsonType": "string",
+              "enum": [
+                "horizontal",
+                "vertical",
+                "libre"
+              ]
+            },
+            "parametrosComando": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoComando": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "categoriaComando": 1,
+            "activo": 1
+          }
+        },
+        {
+          "key": {
+            "tipoEntrada": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_reglas_semanticas",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoRegla",
+            "codigoGesto",
+            "codigoComando",
+            "prioridadRegla",
+            "activo"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoRegla": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "prioridadRegla": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "confianzaMinima": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "estadoAplicacion": {
+              "bsonType": "string",
+              "enum": [
+                "navegacion",
+                "escritura",
+                "formulario"
+              ]
+            },
+            "teclaEquivalente": {
+              "bsonType": "string"
+            },
+            "parametrosEjecucion": {
+              "bsonType": "object"
+            },
+            "activo": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoRegla": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGesto": 1,
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "prioridadRegla": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_configuracion",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoConfiguracion",
+            "motorDestino",
+            "configuracionActiva",
+            "fechaRegistro"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "motorDestino": {
+              "bsonType": "string",
+              "enum": [
+                "navegador"
+              ]
+            },
+            "layoutTeclado": {
+              "bsonType": "string",
+              "enum": [
+                "qwerty",
+                "numerico",
+                "personalizado"
+              ]
+            },
+            "velocidadDesplazamiento": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "sensibilidadScroll": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "teclaConfirmacion": {
+              "bsonType": "string"
+            },
+            "teclaCancelacion": {
+              "bsonType": "string"
+            },
+            "permiteDosManos": {
+              "bsonType": "bool"
+            },
+            "tiempoDebounceMs": {
+              "bsonType": [
+                "int",
+                "long"
+              ],
+              "minimum": 0
+            },
+            "configuracionActiva": {
+              "bsonType": "bool"
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoConfiguracion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "configuracionActiva": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_sesiones",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoSesion",
+            "codigoGuante",
+            "codigoCamara",
+            "codigoConfiguracion",
+            "fechaInicio",
+            "estadoSesion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGuante": {
+              "bsonType": "string"
+            },
+            "codigoCamara": {
+              "bsonType": "string"
+            },
+            "codigoConfiguracion": {
+              "bsonType": "string"
+            },
+            "codigoModeloClasificador": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "codigoTeclado": {
+              "bsonType": [
+                "string",
+                "null"
+              ]
+            },
+            "urlAplicacion": {
+              "bsonType": "string"
+            },
+            "fechaInicio": {
+              "bsonType": "date"
+            },
+            "fechaFin": {
+              "bsonType": [
+                "date",
+                "null"
+              ]
+            },
+            "estadoSesion": {
+              "bsonType": "string",
+              "enum": [
+                "activa",
+                "finalizada",
+                "error"
+              ]
+            },
+            "fechaRegistro": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoSesion": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoGuante": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "codigoCamara": 1,
+            "fechaInicio": -1
+          }
+        },
+        {
+          "key": {
+            "estadoSesion": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_muestras",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoMuestra",
+            "codigoSesion",
+            "codigoGesto",
+            "fechaCaptura"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoMuestra": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGesto": {
+              "bsonType": "string"
+            },
+            "fechaCaptura": {
+              "bsonType": "date"
+            },
+            "datosVision": {
+              "bsonType": "object"
+            },
+            "datosInercia": {
+              "bsonType": "object"
+            },
+            "confianzaVision": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaInercia": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "confianzaFusion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "etiquetaValidada": {
+              "bsonType": "bool"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoMuestra": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "codigoGesto": 1
+          }
+        },
+        {
+          "key": {
+            "fechaCaptura": -1
+          }
+        },
+        {
+          "key": {
+            "etiquetaValidada": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_historial_comandos",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoHistorial",
+            "codigoSesion",
+            "codigoGestoDetectado",
+            "codigoComando",
+            "fechaEjecucion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoHistorial": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "codigoGestoDetectado": {
+              "bsonType": "string"
+            },
+            "codigoComando": {
+              "bsonType": "string"
+            },
+            "fechaEjecucion": {
+              "bsonType": "date"
+            },
+            "confianzaDeteccion": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "teclaEjecutada": {
+              "bsonType": "string"
+            },
+            "caracterIngresado": {
+              "bsonType": "string"
+            },
+            "parametrosEjecutados": {
+              "bsonType": "object"
+            },
+            "resultadoEjecucion": {
+              "bsonType": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoHistorial": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "fechaEjecucion": -1
+          }
+        },
+        {
+          "key": {
+            "codigoComando": 1
+          }
+        },
+        {
+          "key": {
+            "codigoGestoDetectado": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_telemetria",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoTelemetria",
+            "codigoSesion",
+            "tipoTelemetria",
+            "fechaEvento"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoTelemetria": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "tipoTelemetria": {
+              "bsonType": "string",
+              "enum": [
+                "vision",
+                "inercia",
+                "fusion",
+                "dom_event"
+              ]
+            },
+            "fechaEvento": {
+              "bsonType": "date"
+            },
+            "fechaExpiracion": {
+              "bsonType": "date"
+            },
+            "latenciaMs": {
+              "bsonType": [
+                "int",
+                "long",
+                "double",
+                "decimal"
+              ],
+              "minimum": 0
+            },
+            "payload": {
+              "bsonType": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoTelemetria": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1,
+            "tipoTelemetria": 1
+          }
+        },
+        {
+          "key": {
+            "fechaEvento": -1
+          }
+        },
+        {
+          "key": {
+            "fechaExpiracion": 1
+          },
+          "options": {
+            "expireAfterSeconds": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "hibrida_teclado_virtual",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": [
+            "codigoTeclado",
+            "codigoSesion",
+            "layoutTeclado",
+            "fechaActualizacion"
+          ],
+          "properties": {
+            "_id": {
+              "bsonType": "objectId"
+            },
+            "codigoTeclado": {
+              "bsonType": "string"
+            },
+            "codigoSesion": {
+              "bsonType": "string"
+            },
+            "layoutTeclado": {
+              "bsonType": "string"
+            },
+            "filasTeclado": {
+              "bsonType": "array"
+            },
+            "teclaActiva": {
+              "bsonType": "string"
+            },
+            "posicionCursor": {
+              "bsonType": "object"
+            },
+            "fechaActualizacion": {
+              "bsonType": "date"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "indexes": [
+        {
+          "key": {
+            "codigoTeclado": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "key": {
+            "codigoSesion": 1
+          }
+        },
+        {
+          "key": {
+            "layoutTeclado": 1
+          }
+        }
+      ]
+    }
+  ]
+}

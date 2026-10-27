@@ -1,6 +1,6 @@
 # NEXUM AI — Guía de ejecución del sistema
 
-Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: preparación del entorno, arranque de los servicios, emparejamiento del guante y uso de las tres modalidades de interacción.
+Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: preparación del entorno, base de datos MongoDB, arranque de los servicios, emparejamiento del guante y uso de las tres modalidades de interacción.
 
 ---
 
@@ -12,16 +12,17 @@ Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: p
 4. [Orden de arranque](#4-orden-de-arranque)
 5. [Emparejamiento y calibración del guante](#5-emparejamiento-y-calibración-del-guante)
 6. [Uso de las modalidades](#6-uso-de-las-modalidades)
-7. [Navegación entre módulos](#7-navegación-entre-módulos)
-8. [Apagado del sistema](#8-apagado-del-sistema)
-9. [Solución de problemas](#9-solución-de-problemas)
-10. [Referencia rápida](#10-referencia-rápida)
+7. [Base de datos MongoDB](#7-base-de-datos-mongodb)
+8. [Navegación entre módulos](#8-navegación-entre-módulos)
+9. [Apagado del sistema](#9-apagado-del-sistema)
+10. [Solución de problemas](#10-solución-de-problemas)
+11. [Referencia rápida](#11-referencia-rápida)
 
 ---
 
 ## 1. Arquitectura general
 
-NEXUM AI se compone de cuatro elementos que trabajan en conjunto: el guante con sensores (ESP32), el puente unificado en Python, el servidor web local y los paneles que se ejecutan en el navegador.
+NEXUM AI se compone de cinco elementos que trabajan en conjunto: el guante con sensores (ESP32), el puente unificado en Python, el servidor web local, la base de datos MongoDB y los paneles que se ejecutan en el navegador.
 
 ```mermaid
 flowchart LR
@@ -40,6 +41,7 @@ flowchart LR
             P3["Videojuego"]
         end
         OS["Sistema operativo<br/>teclado y mouse"]
+        DB[("MongoDB :27017<br/>base nexum_ai")]
     end
 
     G <-->|"UDP 5005 / 5006<br/>red WiFi ModoB"| B
@@ -50,6 +52,8 @@ flowchart LR
     CAM --> P2
     CAM --> P3
     B --> OS
+    B -->|"sesiones e historial<br/>de la modalidad híbrida"| DB
+    H <-->|"usuarios, sesiones,<br/>historial y escenas"| DB
 ```
 
 El guante se utiliza desde el panel de **Interacción híbrida**, donde también se calibra. Los paneles de **Arquitecto 3D** y **Videojuego** se controlan con la cámara, mediante visión artificial que se ejecuta en el navegador.
@@ -58,7 +62,9 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 |---|---|---|
 | Firmware del guante | `modulo_teclado/hardware-firdware/ManuelAssistGlove/` | Lee la flexión de cada dedo y la envía por UDP |
 | Puente unificado | `scripts/nexum_bridge.py` | Recibe los datos del guante, los interpreta y los distribuye a los paneles |
-| Servidor web | `scripts/nexum_http.py` | Sirve el portal, los paneles y la API de autenticación |
+| Servidor web | `scripts/nexum_http.py` | Sirve el portal, los paneles y la API de autenticación y datos |
+| Acceso a datos | `scripts/nexum_db.py` | Conexión a MongoDB, esquema, sesiones, historial y escenas |
+| Esquema de la base | `project/database/mongodb/nexum_ai_completo.js` | Definición de las 31 colecciones con sus validadores e índices |
 | Portal | `index.html` | Inicio de sesión y acceso a los módulos |
 | Interacción híbrida | `modulo_teclado/laboratorio-web/` | Escritura con el guante y control del cursor con la cámara |
 | Arquitecto 3D | `modulo_arquitecto/panel/` | Edición de escenas tridimensionales mediante gestos |
@@ -72,7 +78,7 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 
 | Elemento | Especificación |
 |---|---|
-| Computadora | Windows 10 u 11, 8 GB de RAM como mínimo |
+| Computadora | Windows 10/11 o Linux (Ubuntu 22.04/24.04), 8 GB de RAM como mínimo |
 | Guante NEXUM | ESP32 con multiplexor TCA9548A y cinco sensores MPU |
 | Cámara web | Integrada o USB, 720p recomendado |
 | Red WiFi | Punto de acceso con nombre `ModoB` |
@@ -83,6 +89,8 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 | Herramienta | Versión | Uso |
 |---|---|---|
 | Python | 3.10 | Puente y servidor web |
+| MongoDB Community Server | 7.0 o superior | Base de datos del sistema |
+| Node.js | 18 o superior (opcional) | Solo para regenerar el esquema JSON si se modifica el script de la base |
 | Navegador | Chrome o Edge actualizado | Paneles y visión por cámara |
 | Arduino IDE | 2.x con el paquete de placas `esp32` | Carga del firmware |
 
@@ -100,7 +108,8 @@ Estos pasos se realizan solo la primera vez que se instala el sistema en una com
 ```mermaid
 flowchart TD
     A["Crear entorno virtual"] --> B["Instalar dependencias"]
-    B --> C["Cargar firmware al ESP32"]
+    B --> M["Instalar MongoDB<br/>e inicializar la base"]
+    M --> C["Cargar firmware al ESP32"]
     C --> D["Preparar el emulador web<br/>(solo modalidad Videojuego)"]
     D --> E["Sistema listo"]
 ```
@@ -127,7 +136,58 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3.2 Cargar el firmware al guante
+**Linux**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 3.2 Instalar MongoDB e inicializar la base
+
+El sistema guarda los usuarios, las sesiones, el historial de comandos y las escenas en MongoDB. El servicio debe quedar escuchando en `127.0.0.1:27017`.
+
+**Windows**
+
+```powershell
+winget install --id MongoDB.Server --exact
+winget install --id MongoDB.Shell --exact
+```
+
+El instalador registra MongoDB como servicio de Windows y lo deja iniciado. Se puede comprobar con `sc query MongoDB`.
+
+**Linux (Ubuntu 22.04 / 24.04)**
+
+```bash
+sudo apt-get install -y gnupg curl
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+  sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/8.0 multiverse" | \
+  sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org
+sudo systemctl enable --now mongod
+systemctl status mongod
+```
+
+**Inicializar la base (ambos sistemas)**
+
+Con el entorno virtual activo, desde la raíz del proyecto:
+
+```bash
+python scripts/nexum_db_init.py
+```
+
+El comando crea la base `nexum_ai` con sus 31 colecciones, validadores e índices. También carga los catálogos iniciales (gestos, comandos, reglas, configuraciones y el modelo entrenado), crea las cuentas de prueba y migra las cuentas de un `usuarios.json` anterior si existe. Puede ejecutarse varias veces sin duplicar datos.
+
+| Opción | Efecto |
+|---|---|
+| `python scripts/nexum_db_init.py --estado` | Muestra la conexión y la cantidad de documentos por colección |
+| `python scripts/nexum_db_init.py --reset` | Elimina la base y la vuelve a crear desde cero |
+
+### 3.3 Cargar el firmware al guante
 
 1. Abrir Arduino IDE.
 2. Abrir el archivo `modulo_teclado/hardware-firdware/ManuelAssistGlove/ManuelAssistGlove.ino`.
@@ -136,7 +196,7 @@ pip install -r requirements.txt
 5. Presionar **Subir** y esperar el mensaje de carga completada.
 6. Desconectar el cable USB y alimentar el guante con su batería.
 
-### 3.3 Preparar el emulador web (modalidad Videojuego)
+### 3.4 Preparar el emulador web (modalidad Videojuego)
 
 Este paso solo es necesario si las carpetas `modulo_game/panel/ejs/cores/` o `modulo_game/panel/web-roms/` no existen.
 
@@ -155,7 +215,8 @@ Cada vez que se utilice el sistema, el arranque debe seguir este orden. Respetar
 
 ```mermaid
 flowchart TD
-    S1["1. Conectar la PC a la red ModoB"] --> S2["2. Iniciar el servidor web"]
+    S0["0. Verificar que MongoDB esté activo"] --> S1["1. Conectar la PC a la red ModoB"]
+    S1 --> S2["2. Iniciar el servidor web"]
     S2 --> S3["3. Iniciar el puente unificado"]
     S3 --> S4["4. Encender el guante"]
     S4 --> S5["5. Abrir el portal en el navegador"]
@@ -163,6 +224,10 @@ flowchart TD
     S6 --> S7["7. Elegir la modalidad"]
     S7 --> S8["8. Calibrar e iniciar"]
 ```
+
+### Paso 0. Verificar MongoDB
+
+MongoDB se inicia solo con el sistema operativo. Si se detuvo, iniciarlo con `net start MongoDB` en Windows o `sudo systemctl start mongod` en Linux.
 
 ### Paso 1. Conectar la computadora a la red
 
@@ -179,8 +244,9 @@ En una primera terminal, desde la raíz del proyecto:
 Resultado esperado:
 
 ```text
+[DB] MongoDB lista: nexum_ai en mongodb://127.0.0.1:27017
 NEXUM HTTP http://127.0.0.1:8090/  (COOP/COEP solo emulador)
-Auth DB: ...\project\database\runtime\usuarios.json
+MongoDB mongodb://127.0.0.1:27017/nexum_ai: conectada
 ```
 
 ### Paso 3. Iniciar el puente unificado
@@ -199,6 +265,8 @@ UDP guante: 5005
 Laboratorio: ws://127.0.0.1:8765
 Juego:       ws://127.0.0.1:8766
 Arquitecto:  ws://127.0.0.1:8767
+NeoRageX: ...
+MongoDB:     mongodb://127.0.0.1:27017/nexum_ai
 [UDP] escuchando 0.0.0.0:5005
 [UDP] buscar ESP32 (bridge_start, hard=True)
 ```
@@ -227,7 +295,7 @@ http://127.0.0.1:8090/
 
 ### Paso 6. Iniciar sesión
 
-Presionar **Iniciar sesion** en la esquina superior. La primera vez, crear un usuario en la pestaña **Crear cuenta**. Las cuentas se guardan localmente en `project/database/runtime/usuarios.json`.
+Presionar **Iniciar sesion** en la esquina superior. La primera vez, crear un usuario en la pestaña **Crear cuenta**. Las cuentas se guardan en la colección `usuarios` de MongoDB, con la contraseña protegida mediante SHA-256 con sal. Las cuentas de prueba son `samuel@gmail.com` y `atzel@nexum.ai`, ambas con la contraseña `1234`.
 
 El portal muestra un indicador de estado que confirma que el servidor, el puente, el guante y la cámara están disponibles.
 
@@ -353,7 +421,7 @@ En este modo, el puntero del sistema se controla con la cámara.
 2. Colocarse frente a la cámara, con ambas manos visibles.
 3. Usar los gestos para seleccionar, mover, rotar, escalar y duplicar módulos de la escena.
 4. Alternar entre los modos **Edicion**, **Navegacion** y **Vista previa** según la tarea.
-5. Usar **Guardar**, **Cargar**, **Exportar JSON** e **Importar JSON** para conservar el trabajo.
+5. Usar **Guardar**, **Cargar**, **Exportar JSON** e **Importar JSON** para conservar el trabajo. **Guardar** almacena la maqueta en MongoDB (colección `arquitecto_escenas`) y también en el navegador; **Cargar** recupera la última maqueta guardada en la base.
 
 ### 6.3 Videojuego
 
@@ -373,7 +441,113 @@ El panel también ofrece botones en pantalla para las direcciones y las acciones
 
 ---
 
-## 7. Navegación entre módulos
+## 7. Base de datos MongoDB
+
+### 7.1 Qué se registra
+
+Cada modalidad abre una sesión al empezar a usarse y la cierra al terminar. Durante la sesión, cada comando reconocido se guarda en el historial junto con el gesto que lo originó.
+
+```mermaid
+flowchart LR
+    subgraph HIB["Interacción híbrida (puente)"]
+        H1["Iniciar transmisión"] --> HS[("hibrida_sesiones")]
+        H2["Letra, número, clic,<br/>cambio de modo"] --> HH[("hibrida_historial_comandos")]
+        H3["Modo y última tecla"] --> HT[("hibrida_teclado_virtual")]
+        H4["Emparejamiento<br/>y calibración"] --> HG[("configuracion_guante")]
+    end
+    subgraph ARQ["Arquitecto 3D (panel)"]
+        A1["Abrir el panel"] --> AS[("arquitecto_sesiones")]
+        A2["Seleccionar, mover,<br/>rotar, orbitar"] --> AH[("arquitecto_historial_comandos")]
+        A3["Guardar maqueta"] --> AE[("arquitecto_escenas")]
+    end
+    subgraph VID["Videojuego (panel)"]
+        V1["Jugar / Detener"] --> VS[("videojuego_sesiones")]
+        V2["Disparo, salto,<br/>movimiento"] --> VH[("videojuego_historial_comandos")]
+        V3["Fin de partida"] --> VP[("videojuego_perfil_jugador")]
+    end
+    P["Portal"] --> U[("usuarios")]
+```
+
+| Momento | Modalidad | Colección | Contenido |
+|---|---|---|---|
+| Iniciar sesión o crear cuenta | Portal | `usuarios` | Nombre, correo, sal y hash de la contraseña |
+| **Iniciar** / **Pausar** en el panel | Interacción híbrida | `hibrida_sesiones` | Inicio, fin, guante, cámara y teclado virtual de la sesión |
+| Cada carácter escrito | Interacción híbrida | `hibrida_historial_comandos` | Dedo, cantidad de toques, mano, modo y tecla escrita |
+| Cada clic o tecla por cámara | Interacción híbrida | `hibrida_historial_comandos` | Gesto de la cámara y acción ejecutada |
+| Abrir y cerrar el panel | Arquitecto 3D | `arquitecto_sesiones` | Inicio, fin y modelo clasificador utilizado |
+| Cada cambio de comando | Arquitecto 3D | `arquitecto_historial_comandos` | Comando, gesto y módulo afectado |
+| **Guardar** | Arquitecto 3D | `arquitecto_escenas` | Módulos con posición, rotación y escala, y la cámara |
+| **Jugar** / **Detener** | Videojuego | `videojuego_sesiones` | Juego, inicio, fin y puntuación |
+| Cada botón presionado | Videojuego | `videojuego_historial_comandos` | Botón y gesto o fuente (cámara, teclado o pantalla) |
+| Fin de partida con usuario | Videojuego | `videojuego_perfil_jugador` | Acciones acumuladas por comando y partidas jugadas |
+
+El puente escribe en segundo plano: si MongoDB no responde, el guante sigue funcionando con normalidad y la terminal muestra un aviso.
+
+### 7.2 Catálogos iniciales
+
+`nexum_db_init.py` carga la configuración base del sistema, que el resto de los registros referencia por código.
+
+| Colección | Contenido inicial |
+|---|---|
+| `modalidades_aplicacion` | Las tres modalidades y sus gestos permitidos |
+| `catalogo_gestos` | Gestos del guante, del cursor, del arquitecto y del videojuego |
+| `hibrida_comandos`, `arquitecto_comandos`, `videojuego_comandos` | Comandos de cada modalidad |
+| `*_reglas_semanticas` | Relación entre cada gesto y el comando que dispara |
+| `configuracion_guante` | Guante `GUANTE-NEXUM-01`: TCA9548A, cinco MPU-6050 en los canales 2 a 6, UDP 5006 |
+| `configuracion_vision` | Cámara `CAMARA-WEB-01` con MediaPipe Hand Landmarker |
+| `configuracion_sistema`, `*_configuracion` | Parámetros generales y de cada modalidad |
+| `modelos_entrenados` | Clasificador `arch_vision_pos3_v1` del arquitecto |
+
+### 7.3 Configuración de la conexión
+
+La conexión se configura con variables de entorno. Si no se definen, se usan los valores por defecto.
+
+| Variable | Valor por defecto | Uso |
+|---|---|---|
+| `NEXUM_MONGO_URI` | `mongodb://127.0.0.1:27017` | Dirección del servidor MongoDB |
+| `NEXUM_MONGO_DB` | `nexum_ai` | Nombre de la base |
+
+Ejemplo en Linux con un servidor remoto que requiere usuario:
+
+```bash
+export NEXUM_MONGO_URI="mongodb://usuario:clave@192.168.1.20:27017/?authSource=admin"
+python scripts/nexum_http.py
+```
+
+Para revisar los datos se puede usar `mongosh`:
+
+```bash
+mongosh nexum_ai --eval "db.hibrida_historial_comandos.find().sort({fechaEjecucion:-1}).limit(5)"
+```
+
+### 7.4 Modificar el esquema
+
+El script `project/database/mongodb/nexum_ai_completo.js` es la definición oficial de la base. El sistema lee una copia en JSON (`nexum_ai_esquema.json`) para no depender de `mongosh`. Después de modificar el script:
+
+```bash
+node project/database/mongodb/exportar_esquema.js
+python scripts/nexum_db_init.py
+```
+
+El primer comando regenera el JSON y el segundo aplica los validadores e índices nuevos sin borrar los datos existentes.
+
+### 7.5 API de datos
+
+El servidor web expone estas rutas, que usan los paneles:
+
+| Método | Ruta | Uso |
+|---|---|---|
+| GET | `/api/db/estado` | Estado de la conexión y documentos por colección |
+| POST | `/api/auth/login`, `/api/auth/register` | Inicio de sesión y registro |
+| POST | `/api/sesiones/iniciar` | Abre una sesión (`modalidad`: `hibrida`, `arquitecto` o `videojuego`) |
+| POST | `/api/sesiones/finalizar` | Cierra una sesión y actualiza el perfil del jugador |
+| POST | `/api/historial` | Registra un lote de comandos ejecutados |
+| POST | `/api/arquitecto/escenas` | Guarda la maqueta de la sesión |
+| GET | `/api/arquitecto/escenas/ultima` | Devuelve la última maqueta guardada |
+
+---
+
+## 8. Navegación entre módulos
 
 Todos los paneles comparten una rueda de navegación.
 
@@ -395,7 +569,7 @@ flowchart LR
 
 ---
 
-## 8. Apagado del sistema
+## 9. Apagado del sistema
 
 El apagado sigue el orden inverso al arranque.
 
@@ -409,7 +583,7 @@ flowchart LR
 
 ---
 
-## 9. Solución de problemas
+## 10. Solución de problemas
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
@@ -420,25 +594,33 @@ flowchart LR
 | El panel de Interacción no se conecta al puente | El puente no está en ejecución | Iniciar `nexum_bridge.py`, recargar la página y presionar **Conectar puente** |
 | La cámara no se activa | Otro panel o programa está usando la cámara | Cerrar las demás pestañas o aplicaciones que la usan y conceder el permiso en el navegador |
 | Los modelos 3D o la visión no cargan | No hay acceso a Internet | Conectar una red con salida a Internet para descargar Three.js y MediaPipe |
-| El emulador muestra una pantalla negra | Faltan los núcleos o las ROM web | Ejecutar los scripts de la sección 3.3 |
+| El emulador muestra una pantalla negra | Faltan los núcleos o las ROM web | Ejecutar los scripts de la sección 3.4 |
+| `MongoDB ... SIN CONEXION` al iniciar el servidor web | El servicio de MongoDB está detenido | Windows: `net start MongoDB`. Linux: `sudo systemctl start mongod`. Luego recargar el portal |
+| "Base de datos no disponible" al iniciar sesión | El servidor web no alcanza MongoDB | Verificar el servicio y la variable `NEXUM_MONGO_URI`; ejecutar `python scripts/nexum_db_init.py --estado` |
+| `Document failed validation` en la terminal | Se envió un campo que el esquema no permite | Ajustar `nexum_ai_completo.js`, regenerar el JSON (sección 7.4) y ejecutar `nexum_db_init.py` |
 
 ---
 
-## 10. Referencia rápida
+## 11. Referencia rápida
 
 ### Comandos
 
 | Acción | Comando |
 |---|---|
+| Inicializar la base | `.venv/Scripts/python.exe scripts/nexum_db_init.py` |
+| Ver el estado de la base | `.venv/Scripts/python.exe scripts/nexum_db_init.py --estado` |
 | Iniciar servidor web | `.venv/Scripts/python.exe -u scripts/nexum_http.py` |
 | Iniciar puente | `.venv/Scripts/python.exe -u scripts/nexum_bridge.py` |
 | Abrir el portal | `http://127.0.0.1:8090/` |
+
+En Linux, reemplazar `.venv/Scripts/python.exe` por `.venv/bin/python`.
 
 ### Puertos
 
 | Puerto | Protocolo | Uso |
 |---|---|---|
-| 8090 | HTTP | Portal, paneles y API de autenticación |
+| 8090 | HTTP | Portal, paneles y API de autenticación y datos |
+| 27017 | TCP | MongoDB |
 | 5005 | UDP | Guante hacia la PC |
 | 5006 | UDP | PC hacia el guante |
 | 8765 | WebSocket | Panel de interacción híbrida y estado del portal |

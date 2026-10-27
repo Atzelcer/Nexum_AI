@@ -21,9 +21,13 @@ sys.path.insert(0, str(ROOT / "modulo_teclado" / "scripts"))
 sys.path.insert(0, str(ROOT / "modulo_game" / "scripts"))
 sys.path.insert(0, str(ROOT / "modulo_arquitecto" / "scripts"))
 
+sys.path.insert(0, str(ROOT / "scripts"))
+
 import arquitecto_bridge as arch
 import game_bridge as game
 import laboratorio_bridge as lab
+import nexum_db
+import nexum_db_recorder
 
 UDP_IP = "0.0.0.0"
 PC_PORT = 5005
@@ -504,6 +508,7 @@ def install_hooks() -> None:
     lab.state.forget_connection = forget_all
     game.state.forget_connection = forget_all
     arch.state.forget_connection = forget_all
+    nexum_db_recorder.install(lab)
 
 
 def ws_accept_loop(port: int, client_fn, label: str) -> None:
@@ -594,6 +599,7 @@ def main() -> None:
     print(f"Juego:       ws://{WS_HOST}:{GAME_WS_PORT}", flush=True)
     print(f"Arquitecto:  ws://{WS_HOST}:{ARCH_WS_PORT}", flush=True)
     print(f"NeoRageX: {game.EMU_EXE}", flush=True)
+    print(f"MongoDB:     {nexum_db.safe_uri()}/{nexum_db.DB_NAME}", flush=True)
     threading.Thread(target=udp_loop, daemon=True).start()
     threading.Thread(target=game.capture_loop, daemon=True).start()
     threading.Thread(target=ws_accept_loop, args=(LAB_WS_PORT, lab_ws_client, "laboratorio"), daemon=True).start()
