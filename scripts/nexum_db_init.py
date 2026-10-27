@@ -24,9 +24,8 @@ def main() -> int:
             print(f"Base {nexum_db.DB_NAME} eliminada")
         if not nexum_db.ensure_ready(force=True):
             return 1
-        importados = nexum_auth_store.import_legacy_json()
         creados = nexum_auth_store.seed_users()
-        print(f"Usuarios migrados desde usuarios.json: {importados}  semilla creados: {creados}")
+        print(f"Usuarios de prueba creados: {creados}")
 
     info = nexum_db.status()
     print(f"Colecciones: {info.get('collections', 0)}")

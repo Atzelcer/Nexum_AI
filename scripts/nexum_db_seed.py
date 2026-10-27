@@ -282,7 +282,7 @@ def seed(database) -> None:
             "confianzaMinimaGlobal": 0.7,
             "tiempoDebounceGlobalMs": 120,
             "ttlTelemetriaDias": 7,
-            "rutaArchivos": "project/database/runtime",
+            "rutaArchivos": "project/bd",
             "configuracionActiva": True,
         }, "$setOnInsert": {"fechaActualizacion": stamp}},
         upsert=True,

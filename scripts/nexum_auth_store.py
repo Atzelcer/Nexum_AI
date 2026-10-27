@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import secrets
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import nexum_db
 
-LEGACY_JSON = nexum_db.ROOT / "project" / "database" / "runtime" / "usuarios.json"
 UNAVAILABLE = "Base de datos no disponible. Inicia MongoDB e intenta de nuevo."
 
 _SEED_USERS = (
@@ -89,33 +86,6 @@ def seed_users() -> int:
     return created
 
 
-def import_legacy_json(path: Path = LEGACY_JSON) -> int:
-    if not path.exists():
-        return 0
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return 0
-    imported = 0
-    for item in data.get("usuarios", []) if isinstance(data, dict) else []:
-        email = str(item.get("correoUsuario", "")).strip().lower()
-        if not email or not item.get("salt") or not item.get("passwordHash"):
-            continue
-        if _users().find_one({"correoUsuario": email}):
-            continue
-        try:
-            fecha = datetime.fromisoformat(str(item.get("fechaRegistro")))
-        except ValueError:
-            fecha = None
-        user = _new_user(str(item.get("nombreUsuario") or email.split("@")[0]), email,
-                         item["salt"], item["passwordHash"], fecha)
-        if item.get("estadoUsuario") == "inactivo":
-            user["estadoUsuario"] = "inactivo"
-        _insert(user)
-        imported += 1
-    return imported
-
-
 def find_user(identity: str) -> dict[str, Any] | None:
     key = identity.strip().lower()
     if not key:
@@ -171,7 +141,6 @@ def ensure_ready() -> bool:
         return False
     if not _seeded:
         try:
-            import_legacy_json()
             seed_users()
             _seeded = True
         except PyMongoError:

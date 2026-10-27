@@ -14,7 +14,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "project" / "database" / "mongodb" / "nexum_ai_esquema.json"
+SCHEMA_PATH = ROOT / "project" / "bd" / "nexum_ai_esquema.json"
 
 MONGO_URI = os.environ.get("NEXUM_MONGO_URI", "mongodb://127.0.0.1:27017")
 DB_NAME = os.environ.get("NEXUM_MONGO_DB", "nexum_ai")

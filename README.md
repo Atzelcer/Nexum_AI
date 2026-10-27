@@ -64,7 +64,7 @@ El guante se utiliza desde el panel de **Interacción híbrida**, donde también
 | Puente unificado | `scripts/nexum_bridge.py` | Recibe los datos del guante, los interpreta y los distribuye a los paneles |
 | Servidor web | `scripts/nexum_http.py` | Sirve el portal, los paneles y la API de autenticación y datos |
 | Acceso a datos | `scripts/nexum_db.py` | Conexión a MongoDB, esquema, sesiones, historial y escenas |
-| Esquema de la base | `project/database/mongodb/nexum_ai_completo.js` | Definición de las 31 colecciones con sus validadores e índices |
+| Esquema de la base | `project/bd/nexum_ai_completo.js` | Definición de las 31 colecciones con sus validadores e índices |
 | Portal | `index.html` | Inicio de sesión y acceso a los módulos |
 | Interacción híbrida | `modulo_teclado/laboratorio-web/` | Escritura con el guante y control del cursor con la cámara |
 | Arquitecto 3D | `modulo_arquitecto/panel/` | Edición de escenas tridimensionales mediante gestos |
@@ -180,7 +180,7 @@ Con el entorno virtual activo, desde la raíz del proyecto:
 python scripts/nexum_db_init.py
 ```
 
-El comando crea la base `nexum_ai` con sus 31 colecciones, validadores e índices. También carga los catálogos iniciales (gestos, comandos, reglas, configuraciones y el modelo entrenado), crea las cuentas de prueba y migra las cuentas de un `usuarios.json` anterior si existe. Puede ejecutarse varias veces sin duplicar datos.
+El comando crea la base `nexum_ai` con sus 31 colecciones, validadores e índices. También carga los catálogos iniciales (gestos, comandos, reglas, configuraciones y el modelo entrenado) y crea las cuentas de prueba. Puede ejecutarse varias veces sin duplicar datos.
 
 | Opción | Efecto |
 |---|---|
@@ -522,10 +522,10 @@ mongosh nexum_ai --eval "db.hibrida_historial_comandos.find().sort({fechaEjecuci
 
 ### 7.4 Modificar el esquema
 
-El script `project/database/mongodb/nexum_ai_completo.js` es la definición oficial de la base. El sistema lee una copia en JSON (`nexum_ai_esquema.json`) para no depender de `mongosh`. Después de modificar el script:
+El script `project/bd/nexum_ai_completo.js` es la definición oficial de la base. El sistema lee una copia en JSON (`nexum_ai_esquema.json`) para no depender de `mongosh`. Después de modificar el script:
 
 ```bash
-node project/database/mongodb/exportar_esquema.js
+node project/bd/exportar_esquema.js
 python scripts/nexum_db_init.py
 ```
 

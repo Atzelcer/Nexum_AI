@@ -20,6 +20,3 @@ Thumbs.db
 .DS_Store
 
 .nexum_last_esp_ip
-project/database/runtime/usuarios.json
-project/database/runtime/*.tmp
-project/database/runtime/*.bak
