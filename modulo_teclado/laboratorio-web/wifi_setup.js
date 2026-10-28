@@ -6,9 +6,8 @@ const POLL_MS = 5000;
 const LINK_WAIT_MS = 40000;
 const SEND_WAIT_MS = 20000;
 const CLOSE_DELAY_MS = 900;
-const LIVE_NEED = 2;
-const LIVE_GRACE_MS = 4000;
-const VERIFY_NEED = 2;
+const LIVE_NEED = 1;
+const LIVE_GRACE_MS = 2500;
 const STEPS = ["send", "save", "join", "link"];
 
 const $ = (id) => document.getElementById(id);
@@ -300,30 +299,30 @@ async function refreshNetwork() {
   renderStatus();
   renderHint();
   if (state.busy) tryFinishLink();
-  else maybeAutoCloseReady();
+  else maybeReadyLinked();
 }
 
-function finishOk(text, { autoClose = false } = {}) {
+function showContinue(ready = true) {
+  if (!els.verify) return;
+  els.verify.hidden = false;
+  els.verify.disabled = !ready;
+  els.verify.textContent = "Continuar";
+}
+
+function finishOk(text) {
   window.clearTimeout(state.timer);
   state.pending = null;
   state.busy = false;
+  state.verifiedClose = true;
   stepsDone();
   setMsg(text, "ok");
-  els.send.disabled = true;
-  els.send.textContent = "Guante enlazado";
+  els.send.disabled = false;
+  els.send.textContent = "Reconfigurar";
   els.ssid.readOnly = false;
   els.pass.readOnly = false;
   els.form.classList.add("is-done");
-  hideExtraActions();
-  window.clearTimeout(state.closeTimer);
-  // Solo cierra solo si ya se verifico el enlace (datos vivos o confirmacion explicita).
-  if (autoClose && state.verifiedClose) {
-    state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
-  } else if (els.verify) {
-    els.verify.hidden = false;
-    els.verify.disabled = false;
-    els.verify.textContent = "Cerrar — enlace verificado";
-  }
+  if (els.retry) els.retry.hidden = true;
+  showContinue(true);
 }
 
 function finishError(text) {
@@ -379,21 +378,8 @@ function alreadySameNetwork() {
   return false;
 }
 
-function linkVerifiedByData() {
-  return gloveLinked() && !!state.gloveSsid && state.verifyPoints >= VERIFY_NEED;
-}
-
-function showVerifyUi(ready) {
-  if (!els.verify) return;
-  els.verify.hidden = false;
-  els.verify.disabled = !ready;
-  els.verify.textContent = ready
-    ? "Confirmar enlace (datos OK)"
-    : `Verificando… (${state.verifyPoints}/${VERIFY_NEED} datos)`;
-}
-
-function maybeAutoCloseReady() {
-  if (state.busy || state.verifiedClose) return false;
+function maybeReadyLinked() {
+  if (state.busy) return false;
   if (!els.modal || els.modal.hidden) return false;
   if (!gloveLinked()) {
     if (els.verify) els.verify.hidden = true;
@@ -401,53 +387,43 @@ function maybeAutoCloseReady() {
   }
 
   resetSteps(true);
-  // Marcar pasos visuales solo cuando hay evidencia de red.
-  if (alreadySameNetwork()) stepsDone();
+  if (alreadySameNetwork() || state.gloveSsid) stepsDone();
   else stepTo("link");
 
-  if (!state.gloveSsid) {
-    setMsg(`Guante visible (${state.gloveIp}). Esperando WIFI_INFO…`, "info");
-    showVerifyUi(false);
-    return false;
-  }
-
-  if (!linkVerifiedByData()) {
-    setMsg(
-      `Guante en "${state.gloveSsid}" (${state.gloveIp}). Mueve un dedo para verificar datos (${state.verifyPoints}/${VERIFY_NEED})…`,
-      "info"
-    );
-    showVerifyUi(false);
-    return false;
-  }
-
-  // Datos vivos recibidos: habilitar confirmacion. NO cerrar solo.
-  state.verifiedClose = false;
-  setMsg(
-    `Enlace verificado: "${state.gloveSsid}" · ${state.gloveIp} · ${state.verifyPoints} datos. Confirma para cerrar.`,
-    "ok"
-  );
-  stepsDone();
-  showVerifyUi(true);
-  els.send.textContent = "Reconfigurar por USB";
+  const label = state.gloveSsid
+    ? `"${state.gloveSsid}" · ${state.gloveIp}`
+    : state.gloveIp;
+  setMsg(`Guante enlazado (${label}). Pulsa Continuar para calibrar en el laboratorio.`, "ok");
+  els.send.textContent = "Reconfigurar";
   els.send.disabled = false;
+  state.verifiedClose = true;
+  showContinue(true);
   return true;
 }
 
-function confirmVerifiedLink() {
-  if (!linkVerifiedByData() && !state.verifiedClose) {
-    setMsg("Aun no hay datos del guante. Mueve un dedo y espera la verificacion.", "warn");
-    showVerifyUi(false);
+function continueToLab() {
+  if (!gloveLinked() && !state.verifiedClose) {
+    setMsg("Aun no hay enlace con el guante. Espera WIFI_OK o conecta por USB.", "warn");
     return;
   }
   state.verifiedClose = true;
-  finishOk(`Enlace confirmado: "${state.gloveSsid || targetSsid()}" · ${state.gloveIp}`, { autoClose: true });
   window.clearTimeout(state.closeTimer);
-  state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
+  closeModal();
 }
 
 function configProgressOk() {
-  // Solo cerrar tras una sesion de config real (enviado + guardado o WiFi OK).
   return state.busy && state.sawSent && (state.sawSaved || state.sawJoined);
+}
+
+function armLinkGraceCheck() {
+  window.clearTimeout(state.timer);
+  const session = state.session;
+  const started = state.linkReadyAt || Date.now();
+  state.linkReadyAt = started;
+  const left = Math.max(200, LIVE_GRACE_MS - (Date.now() - started) + 50);
+  state.timer = window.setTimeout(() => {
+    if (state.busy && state.session === session) tryFinishLink();
+  }, left);
 }
 
 function tryFinishLink() {
@@ -455,9 +431,6 @@ function tryFinishLink() {
   if (!gloveLinked()) {
     state.linkReadyAt = 0;
     return;
-  }
-  if (state.joinedIp && state.gloveIp !== state.joinedIp && state.gloveIp !== GLOVE_AP_IP) {
-    // IP distinta a la reportada por WIFI_OK pero valida: sigue siendo enlace real.
   }
   if (!state.linkReadyAt) state.linkReadyAt = Date.now();
 
@@ -467,26 +440,23 @@ function tryFinishLink() {
 
   if (!pointsOk && !graceOk) {
     stepTo("link");
-    setMsg(`Enlazado (${state.gloveIp}). Comprobando datos del guante…`, "info");
+    setMsg(`Enlazado (${state.gloveIp}). Casi listo…`, "info");
+    armLinkGraceCheck();
     return;
   }
 
-  const ssid = state.pending || els.ssid.value.trim();
-  const extra = pointsOk ? ` · datos OK` : "";
-  state.verifiedClose = pointsOk;
-  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}${extra}`, { autoClose: pointsOk });
+  const ssid = state.pending || els.ssid.value.trim() || state.gloveSsid || "WiFi";
+  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}. Pulsa Continuar para calibrar.`);
 }
 
 function onLivePoint(msg) {
   const t = msg?.type;
-  // "gloves" actualiza IP/estado; no cuenta como dato de movimiento.
   if (t !== "finger" && t !== "preview" && t !== "calibration") return;
   if (!gloveLinked()) return;
 
-  // Contar datos tambien con el modal en verificacion (sin estar configurando).
   if (!els.modal.hidden && !state.busy) {
     state.verifyPoints += 1;
-    maybeAutoCloseReady();
+    maybeReadyLinked();
   }
 
   if (!state.busy || !state.sawSent) return;
@@ -504,7 +474,7 @@ function onBridgeMessage(msg) {
     }
     renderStatus();
     if (state.busy) tryFinishLink();
-    else maybeAutoCloseReady();
+    else maybeReadyLinked();
     return;
   }
 
@@ -512,7 +482,7 @@ function onBridgeMessage(msg) {
     if (msg.type === "gloves" && Array.isArray(msg.gloves) && msg.gloves[0]?.ip) {
       state.gloveIp = msg.gloves[0].ip;
       renderStatus();
-      if (!state.busy) maybeAutoCloseReady();
+      if (!state.busy) maybeReadyLinked();
     }
     onLivePoint(msg);
     return;
@@ -525,7 +495,7 @@ function onBridgeMessage(msg) {
     state.gloveSsid = msg.mode === "STA" ? msg.ssid : "";
     renderStatus();
     if (state.busy) tryFinishLink();
-    else maybeAutoCloseReady();
+    else maybeReadyLinked();
     return;
   }
 
@@ -600,14 +570,9 @@ function sendWifi(event) {
   }
 
   const ssid = els.ssid.value.trim();
-  // Si ya esta enlazado en esa red, no saltes: exige datos vivos + confirmar.
-  if (alreadySameNetwork() && ssidSame(state.gloveSsid || ssid, ssid) && linkVerifiedByData()) {
-    confirmVerifiedLink();
-    return;
-  }
+  // Si ya esta enlazado en esa red: Continuar cierra y deja listo Calibrar.
   if (alreadySameNetwork() && ssidSame(state.gloveSsid || ssid, ssid)) {
-    setMsg(`Guante ya en "${state.gloveSsid}". Mueve un dedo para verificar antes de cerrar.`, "info");
-    showVerifyUi(false);
+    finishOk(`Guante ya en "${state.gloveSsid}" · ${state.gloveIp}. Pulsa Continuar para calibrar.`);
     return;
   }
 
@@ -658,9 +623,7 @@ function openModal(auto = false) {
   els.pass.type = "password";
   els.showPass.textContent = "Ver";
   setHint(els.passHint, "");
-  setMsg(auto
-    ? "Verificando enlace del guante… no se cierra hasta confirmar datos."
-    : "");
+  setMsg(auto ? "Comprobando si el guante ya esta enlazado…" : "");
   resetSessionFlags();
   setBusy(false);
   resetSteps(false);
@@ -671,8 +634,7 @@ function openModal(auto = false) {
   refreshNetwork();
   window.clearInterval(state.poll);
   state.poll = window.setInterval(refreshNetwork, POLL_MS);
-  // Pedir WIFI_INFO al puente si hay guante (via hello ya llega; reforzar mensaje).
-  window.setTimeout(() => maybeAutoCloseReady(), 400);
+  window.setTimeout(() => maybeReadyLinked(), 400);
 }
 
 function closeModal() {
@@ -694,7 +656,7 @@ function closeModal() {
 let ssidTimer = 0;
 els.form.addEventListener("submit", sendWifi);
 els.open?.addEventListener("click", () => openModal(false));
-els.verify?.addEventListener("click", confirmVerifiedLink);
+els.verify?.addEventListener("click", continueToLab);
 els.retry?.addEventListener("click", retryFlow);
 els.form.addEventListener("pointerdown", () => { state.touched = true; });
 els.ssid.addEventListener("input", () => {
