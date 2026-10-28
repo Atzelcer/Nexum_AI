@@ -89,11 +89,19 @@ function cameraError(err) {
   const name = err?.name || "";
   const msg = err?.message || String(err);
   if (name === "NotAllowedError") return "Permiso de camara denegado. Permitela en el candado de Chrome.";
-  if (name === "NotFoundError") return "No hay webcam conectada.";
+  if (name === "NotFoundError") {
+    return "No hay webcam. En VirtualBox: Dispositivos → Webcam → activa la del host.";
+  }
   if (name === "NotReadableError" || /device in use/i.test(msg)) {
     return "Webcam ocupada. Cierra Zoom, Camara de Windows u otras pestanas de NEXUM y reintenta.";
   }
   if (name === "OverconstrainedError") return "La webcam no acepta esa resolucion. Reintenta.";
+  if (/out of memory|oom|memory|Array buffer allocation|Failed to allocate|Insufficient memory|WebAssembly\.Memory|GL_OUT_OF_MEMORY/i.test(msg)) {
+    return "No hay memoria suficiente para el modelo de vision. Cierra otras apps/pestanas y reintenta.";
+  }
+  if (/Failed to fetch|NetworkError|CDN|Load failed|timed out|tardo demasiado/i.test(msg)) {
+    return "No se pudo cargar MediaPipe (red/CDN o timeout). Revisa internet y recarga.";
+  }
   return msg;
 }
 
@@ -214,21 +222,25 @@ export class NexumVision {
         18000,
         "WASM de MediaPipe no arranco. Recarga la pagina."
       );
-      this.landmarker = await withTimeout(
-        HandLandmarker.createFromOptions(resolver, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-          runningMode: "VIDEO",
-          numHands: 2,
-          minHandDetectionConfidence: 0.55,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        }),
-        25000,
-        "El modelo de manos tardo demasiado. Recarga e intenta de nuevo."
-      );
+      try {
+        this.landmarker = await withTimeout(
+          HandLandmarker.createFromOptions(resolver, {
+            baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+            runningMode: "VIDEO",
+            numHands: 2,
+            minHandDetectionConfidence: 0.55,
+            minHandPresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5
+          }),
+          25000,
+          "El modelo de manos tardo demasiado (posible falta de memoria). Cierra pestanas y reintenta."
+        );
+      } catch (modelErr) {
+        throw new Error(cameraError(modelErr));
+      }
     } catch (err) {
       this.stop();
-      throw err;
+      throw new Error(cameraError(err));
     }
 
     this.running = true;

@@ -5,9 +5,10 @@ const GLOVE_AP_SSID = "NEXUM-GUANTE";
 const POLL_MS = 5000;
 const LINK_WAIT_MS = 40000;
 const SEND_WAIT_MS = 20000;
-const CLOSE_DELAY_MS = 1200;
-const LIVE_NEED = 1;
-const LIVE_GRACE_MS = 2500;
+const CLOSE_DELAY_MS = 900;
+const LIVE_NEED = 2;
+const LIVE_GRACE_MS = 4000;
+const VERIFY_NEED = 2;
 const STEPS = ["send", "save", "join", "link"];
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +27,7 @@ const els = {
   steps: $("wifiSteps"),
   msg: $("wifiMsg"),
   send: $("wifiSendBtn"),
+  verify: $("wifiVerifyBtn"),
   retry: $("wifiRetryBtn"),
   skip: $("wifiSkipNext"),
   open: $("wifiSetupBtn")
@@ -58,7 +60,9 @@ const state = {
   sawJoined: false,
   joinedIp: null,
   livePoints: 0,
-  linkReadyAt: 0
+  linkReadyAt: 0,
+  verifyPoints: 0,
+  verifiedClose: false
 };
 
 function wsUrl() {
@@ -77,6 +81,10 @@ function setHint(node, text, kind = "") {
 
 function hideExtraActions() {
   if (els.retry) els.retry.hidden = true;
+  if (els.verify) {
+    els.verify.hidden = true;
+    els.verify.disabled = true;
+  }
 }
 
 function setBusy(busy) {
@@ -295,7 +303,7 @@ async function refreshNetwork() {
   else maybeAutoCloseReady();
 }
 
-function finishOk(text) {
+function finishOk(text, { autoClose = false } = {}) {
   window.clearTimeout(state.timer);
   state.pending = null;
   state.busy = false;
@@ -308,7 +316,14 @@ function finishOk(text) {
   els.form.classList.add("is-done");
   hideExtraActions();
   window.clearTimeout(state.closeTimer);
-  state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
+  // Solo cierra solo si ya se verifico el enlace (datos vivos o confirmacion explicita).
+  if (autoClose && state.verifiedClose) {
+    state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
+  } else if (els.verify) {
+    els.verify.hidden = false;
+    els.verify.disabled = false;
+    els.verify.textContent = "Cerrar — enlace verificado";
+  }
 }
 
 function finishError(text) {
@@ -355,30 +370,79 @@ function targetSsid() {
 function alreadySameNetwork() {
   if (!gloveLinked()) return false;
   const glove = state.gloveSsid;
+  if (!glove || glove === GLOVE_AP_SSID) return false;
   const pc = state.net.ssid;
   const target = targetSsid();
-  // Misma red: SSID del guante coincide con la PC o con la red elegida (p. ej. 2.4 vs 5).
-  if (glove && (ssidSame(glove, pc) || ssidSame(glove, target))) return true;
-  // Enlazado estable sin SSID aun, pero la PC y el campo apuntan a la misma red.
-  if (!glove && pc && target && ssidSame(pc, target) && state.net.ssid !== GLOVE_AP_SSID) return true;
+  // Exige SSID real del guante (WIFI_INFO). Coincide con PC o con la red elegida.
+  if (pc && ssidSame(glove, pc)) return true;
+  if (target && ssidSame(glove, target)) return true;
   return false;
 }
 
+function linkVerifiedByData() {
+  return gloveLinked() && !!state.gloveSsid && state.verifyPoints >= VERIFY_NEED;
+}
+
+function showVerifyUi(ready) {
+  if (!els.verify) return;
+  els.verify.hidden = false;
+  els.verify.disabled = !ready;
+  els.verify.textContent = ready
+    ? "Confirmar enlace (datos OK)"
+    : `Verificando… (${state.verifyPoints}/${VERIFY_NEED} datos)`;
+}
+
 function maybeAutoCloseReady() {
-  if (state.busy || state.touched) return false;
+  if (state.busy || state.verifiedClose) return false;
   if (!els.modal || els.modal.hidden) return false;
-  if (!alreadySameNetwork()) return false;
-  resetSteps(true);
-  stepsDone();
-  const text = `Ya estan en la misma red. Guante enlazado (${state.gloveIp}).`;
-  if (state.auto) {
-    finishOk(text);
-    return true;
+  if (!gloveLinked()) {
+    if (els.verify) els.verify.hidden = true;
+    return false;
   }
-  // Apertura manual: avisa pero no fuerza el cierre (por si quieren cambiar la red por USB).
-  setMsg(text + " Si quieres cambiarla, conecta el USB y pulsa Configurar guante.", "ok");
+
+  resetSteps(true);
+  // Marcar pasos visuales solo cuando hay evidencia de red.
+  if (alreadySameNetwork()) stepsDone();
+  else stepTo("link");
+
+  if (!state.gloveSsid) {
+    setMsg(`Guante visible (${state.gloveIp}). Esperando WIFI_INFO…`, "info");
+    showVerifyUi(false);
+    return false;
+  }
+
+  if (!linkVerifiedByData()) {
+    setMsg(
+      `Guante en "${state.gloveSsid}" (${state.gloveIp}). Mueve un dedo para verificar datos (${state.verifyPoints}/${VERIFY_NEED})…`,
+      "info"
+    );
+    showVerifyUi(false);
+    return false;
+  }
+
+  // Datos vivos recibidos: habilitar confirmacion. NO cerrar solo.
+  state.verifiedClose = false;
+  setMsg(
+    `Enlace verificado: "${state.gloveSsid}" · ${state.gloveIp} · ${state.verifyPoints} datos. Confirma para cerrar.`,
+    "ok"
+  );
+  stepsDone();
+  showVerifyUi(true);
   els.send.textContent = "Reconfigurar por USB";
+  els.send.disabled = false;
   return true;
+}
+
+function confirmVerifiedLink() {
+  if (!linkVerifiedByData() && !state.verifiedClose) {
+    setMsg("Aun no hay datos del guante. Mueve un dedo y espera la verificacion.", "warn");
+    showVerifyUi(false);
+    return;
+  }
+  state.verifiedClose = true;
+  finishOk(`Enlace confirmado: "${state.gloveSsid || targetSsid()}" · ${state.gloveIp}`, { autoClose: true });
+  window.clearTimeout(state.closeTimer);
+  state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
 }
 
 function configProgressOk() {
@@ -409,14 +473,23 @@ function tryFinishLink() {
 
   const ssid = state.pending || els.ssid.value.trim();
   const extra = pointsOk ? ` · datos OK` : "";
-  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}${extra}`);
+  state.verifiedClose = pointsOk;
+  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}${extra}`, { autoClose: pointsOk });
 }
 
 function onLivePoint(msg) {
-  if (!state.busy || !state.sawSent) return;
   const t = msg?.type;
-  if (t !== "finger" && t !== "preview" && t !== "calibration" && t !== "gloves") return;
+  // "gloves" actualiza IP/estado; no cuenta como dato de movimiento.
+  if (t !== "finger" && t !== "preview" && t !== "calibration") return;
   if (!gloveLinked()) return;
+
+  // Contar datos tambien con el modal en verificacion (sin estar configurando).
+  if (!els.modal.hidden && !state.busy) {
+    state.verifyPoints += 1;
+    maybeAutoCloseReady();
+  }
+
+  if (!state.busy || !state.sawSent) return;
   state.livePoints += 1;
   tryFinishLink();
 }
@@ -527,12 +600,14 @@ function sendWifi(event) {
   }
 
   const ssid = els.ssid.value.trim();
-  // Ya en la misma red y enlazado: no hace falta reconfigurar.
+  // Si ya esta enlazado en esa red, no saltes: exige datos vivos + confirmar.
+  if (alreadySameNetwork() && ssidSame(state.gloveSsid || ssid, ssid) && linkVerifiedByData()) {
+    confirmVerifiedLink();
+    return;
+  }
   if (alreadySameNetwork() && ssidSame(state.gloveSsid || ssid, ssid)) {
-    state.touched = false;
-    resetSteps(true);
-    stepsDone();
-    finishOk(`Ya estan en la misma red ("${state.gloveSsid || ssid}"). Guante ${state.gloveIp}.`);
+    setMsg(`Guante ya en "${state.gloveSsid}". Mueve un dedo para verificar antes de cerrar.`, "info");
+    showVerifyUi(false);
     return;
   }
 
@@ -574,6 +649,8 @@ function openModal(auto = false) {
   els.modal.hidden = false;
   state.auto = auto;
   state.touched = false;
+  state.verifiedClose = false;
+  state.verifyPoints = 0;
   state.ssidEdited = false;
   state.passEdited = false;
   state.passFor = null;
@@ -581,7 +658,9 @@ function openModal(auto = false) {
   els.pass.type = "password";
   els.showPass.textContent = "Ver";
   setHint(els.passHint, "");
-  setMsg("");
+  setMsg(auto
+    ? "Verificando enlace del guante… no se cierra hasta confirmar datos."
+    : "");
   resetSessionFlags();
   setBusy(false);
   resetSteps(false);
@@ -592,6 +671,8 @@ function openModal(auto = false) {
   refreshNetwork();
   window.clearInterval(state.poll);
   state.poll = window.setInterval(refreshNetwork, POLL_MS);
+  // Pedir WIFI_INFO al puente si hay guante (via hello ya llega; reforzar mensaje).
+  window.setTimeout(() => maybeAutoCloseReady(), 400);
 }
 
 function closeModal() {
@@ -613,6 +694,7 @@ function closeModal() {
 let ssidTimer = 0;
 els.form.addEventListener("submit", sendWifi);
 els.open?.addEventListener("click", () => openModal(false));
+els.verify?.addEventListener("click", confirmVerifiedLink);
 els.retry?.addEventListener("click", retryFlow);
 els.form.addEventListener("pointerdown", () => { state.touched = true; });
 els.ssid.addEventListener("input", () => {

@@ -1846,7 +1846,7 @@ input[type="range"] {
 .wifi-steps li[data-state="check"] i { border-color: var(--accent); background: transparent; animation: none; }
 .wifi-steps li[data-state="check"] i::after { content: "?"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--accent); font: 700 11px/1 sans-serif; font-style: normal; }
 .wifi-actions { display: grid; gap: 8px; margin-top: 4px; }
-.wifi-confirm[hidden], .wifi-retry[hidden] { display: none !important; }
+.wifi-confirm[hidden], .wifi-verify[hidden], .wifi-retry[hidden] { display: none !important; }
 @keyframes wifi-spin { to { transform: rotate(360deg); } }
 
 .wifi-card.is-done { animation: wifi-done 0.35s ease-in 1.1s forwards; }

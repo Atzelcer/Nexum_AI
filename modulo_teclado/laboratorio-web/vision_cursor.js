@@ -113,6 +113,45 @@ function analyzeHand(lm) {
   };
 }
 
+function visionLoadError(err) {
+  const name = err?.name || "";
+  const msg = String(err?.message || err || "");
+  if (name === "NotAllowedError") {
+    return "Permiso de camara denegado. Permitela en el candado de Chrome.";
+  }
+  if (name === "NotFoundError") {
+    return "No hay webcam. En VirtualBox: Dispositivos → Webcam → activa la camara del host.";
+  }
+  if (name === "NotReadableError" || /in use|Could not start/i.test(msg)) {
+    return "Camara ocupada. Cierra Zoom/Meet u otra pestana de NEXUM e intenta de nuevo.";
+  }
+  if (/out of memory|oom|memory|Array buffer allocation|Failed to allocate|enought memory|Insufficient memory|WebAssembly\.Memory/i.test(msg)) {
+    return "No hay memoria suficiente para el modelo de vision. Cierra otras apps/pestanas, baja Chrome a una sola ventana NEXUM y reintenta.";
+  }
+  if (/Failed to fetch|NetworkError|CDN|Load failed|ERR_INTERNET|timed out|tardo demasiado/i.test(msg)) {
+    return "No se pudo cargar MediaPipe (red/CDN). Revisa internet en la VM y recarga.";
+  }
+  if (/Wasm|WebAssembly|GPU|delegate|GL_OUT_OF_MEMORY/i.test(msg)) {
+    return "El motor de vision fallo (GPU/WASM). Reintentando en CPU puede ayudar; cierra otras pestanas con camara.";
+  }
+  return msg || "No se pudo iniciar la vision por computadora.";
+}
+
+function preferCpuDelegate() {
+  // VirtualBox / VMs suelen fallar con GPU WebGL para MediaPipe.
+  const ua = navigator.userAgent || "";
+  if (/VirtualBox|VMware|QEMU|Hyper-V/i.test(ua)) return true;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (!gl) return true;
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "") : "";
+    if (/llvmpipe|SVGA|VBox|VirtualBox|SwiftShader|Microsoft Basic/i.test(renderer)) return true;
+  } catch (_e) {}
+  return false;
+}
+
 export class CursorVision {
   constructor({ video, canvas, onAction, onStatus, onHint }) {
     this.video = video;
@@ -146,56 +185,77 @@ export class CursorVision {
 
   async start() {
     if (this.running) return;
-    this.onStatus?.("Cargando MediaPipe…");
-
-    const { FilesetResolver, HandLandmarker } = await import(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm"
-    );
-    const resolver = await FilesetResolver.forVisionTasks(WASM_BASE);
-    const options = (delegate) => ({
-      baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      runningMode: "VIDEO",
-      numHands: 2,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
     try {
-      this.landmarker = await HandLandmarker.createFromOptions(resolver, options("GPU"));
-    } catch (_e) {
-      this.landmarker = await HandLandmarker.createFromOptions(resolver, options("CPU"));
-    }
+      this.onStatus?.("Cargando MediaPipe…");
 
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "user",
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        frameRate: { ideal: 30, max: 30 }
-      },
-      audio: false
-    });
-    this.video.srcObject = this.stream;
-    this.video.muted = true;
-    this.video.playsInline = true;
-    await this.video.play();
-    await new Promise((r) => {
-      if (this.video.videoWidth) r();
-      else this.video.addEventListener("loadeddata", () => r(), { once: true });
-    });
-    this.syncCanvas();
-    this.fx.reset();
-    this.fy.reset();
-    this.history = [];
+      const { FilesetResolver, HandLandmarker } = await import(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm"
+      );
+      const resolver = await FilesetResolver.forVisionTasks(WASM_BASE);
+      const options = (delegate) => ({
+        baseOptions: { modelAssetPath: MODEL_URL, delegate },
+        runningMode: "VIDEO",
+        numHands: 1,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+      const cpuFirst = preferCpuDelegate();
+      try {
+        this.landmarker = await HandLandmarker.createFromOptions(
+          resolver,
+          options(cpuFirst ? "CPU" : "GPU")
+        );
+      } catch (firstErr) {
+        try {
+          this.landmarker = await HandLandmarker.createFromOptions(
+            resolver,
+            options(cpuFirst ? "GPU" : "CPU")
+          );
+        } catch (secondErr) {
+          throw new Error(visionLoadError(secondErr || firstErr));
+        }
+      }
 
-    this.running = true;
-    this.onStatus?.("Vision lista — mueve el indice");
-    const loop = () => {
-      if (!this.running) return;
-      this.tick();
+      this.onStatus?.("Abriendo camara…");
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 24, max: 30 }
+          },
+          audio: false
+        });
+      } catch (camErr) {
+        throw new Error(visionLoadError(camErr));
+      }
+      this.video.srcObject = this.stream;
+      this.video.muted = true;
+      this.video.playsInline = true;
+      await this.video.play();
+      await new Promise((r) => {
+        if (this.video.videoWidth) r();
+        else this.video.addEventListener("loadeddata", () => r(), { once: true });
+      });
+      this.syncCanvas();
+      this.fx.reset();
+      this.fy.reset();
+      this.history = [];
+
+      this.running = true;
+      this.onStatus?.("Vision lista — mueve el indice");
+      const loop = () => {
+        if (!this.running) return;
+        this.tick();
+        this.timer = window.setTimeout(loop, DETECT_MS);
+      };
       this.timer = window.setTimeout(loop, DETECT_MS);
-    };
-    this.timer = window.setTimeout(loop, DETECT_MS);
+    } catch (err) {
+      try { this.stop(); } catch (_e) {}
+      throw new Error(visionLoadError(err));
+    }
   }
 
   syncCanvas() {

@@ -665,13 +665,79 @@ def hand_for_ip(ip):
     return "r"
 
 
-def obtener_ip_local_hacia(destino_ip):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def _es_ip_nat_vbox(ip):
+    return bool(ip) and str(ip).startswith("10.0.2.")
+
+
+def _misma_subred_24(a, b):
     try:
-        s.connect((destino_ip, ESP_PORT))
-        return s.getsockname()[0]
+        return a.rsplit(".", 1)[0] == b.rsplit(".", 1)[0]
+    except Exception:
+        return False
+
+
+def _ips_locales_ipv4():
+    found = []
+    seen = set()
+
+    def add(ip):
+        if not ip or ip.startswith("127.") or ip in seen:
+            return
+        seen.add(ip)
+        found.append(ip)
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET, socket.SOCK_DGRAM):
+            add(info[4][0])
+    except OSError:
+        pass
+
+    for probe in (destino for destino in (
+        "192.168.0.1", "192.168.1.1", "192.168.50.1", "10.0.2.2", "8.8.8.8"
+    )):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect((probe, 80))
+            add(sock.getsockname()[0])
+        except OSError:
+            pass
+        finally:
+            sock.close()
+    return found
+
+
+def obtener_ip_local_hacia(destino_ip):
+    """IP local que el guante puede alcanzar (evita NAT 10.0.2.x de VirtualBox)."""
+    destino_ip = str(destino_ip or "").strip()
+    locales = _ips_locales_ipv4()
+
+    # 1) Misma subred /24 y no NAT
+    for ip in locales:
+        if destino_ip and _misma_subred_24(ip, destino_ip) and not _es_ip_nat_vbox(ip):
+            return ip
+
+    # 2) Ruta real hacia el destino (si no es NAT de VBox)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect((destino_ip or "8.8.8.8", ESP_PORT))
+        routed = sock.getsockname()[0]
+    except OSError:
+        routed = None
     finally:
-        s.close()
+        sock.close()
+
+    if routed and not _es_ip_nat_vbox(routed):
+        return routed
+
+    # 3) Cualquier IP local no-NAT (bridged)
+    for ip in locales:
+        if not _es_ip_nat_vbox(ip):
+            return ip
+
+    # 4) Ultimo recurso
+    if routed:
+        return routed
+    return locales[0] if locales else "127.0.0.1"
 
 
 def send_mode_to_esp():

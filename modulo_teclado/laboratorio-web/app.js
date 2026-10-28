@@ -6,7 +6,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { CursorVision } from "./vision_cursor.js?v=prec2";
+import { CursorVision } from "./vision_cursor.js?v=vmmem1";
 
 const MODEL_URL = new URL("../modelo3D-brazo/source/rigged hand.fbx", import.meta.url).href;
 const TEXTURE_URL = new URL("../modelo3D-brazo/textures/pCube1_albedo.jpg", import.meta.url).href;
@@ -2072,9 +2072,17 @@ async function syncCursorVision(enable, opts = {}) {
       console.error(err);
       try { state.cursorVision?.stop(); } catch (_e) {}
       if (state.cursorVisionWanted && !state.visionYielded) {
-        const busy = err?.name === "NotReadableError" || /in use|could not start|ocupad/i.test(err?.message || "");
-        const denied = err?.name === "NotAllowedError";
-        if (busy) {
+        const text = String(err?.message || err || "");
+        const busy = err?.name === "NotReadableError" || /in use|could not start|ocupad/i.test(text);
+        const denied = err?.name === "NotAllowedError" || /permiso|denegad/i.test(text);
+        const memory = /memoria|memory|oom|allocate|WebAssembly\.Memory/i.test(text);
+        if (memory) {
+          setBadge(els.visionBadge, "Vision: sin memoria", "bad");
+          if (els.visionStatus) {
+            els.visionStatus.textContent = text || "Memoria insuficiente para el modelo. Cierra pestanas y reintenta.";
+          }
+          els.lastEvent.textContent = "Vision: no se pudo cargar el modelo (memoria)";
+        } else if (busy) {
           setBadge(els.visionBadge, "Vision: camara ocupada", "warn");
           if (els.visionStatus) els.visionStatus.textContent = "La camara la tiene otra app o pestaña (Zoom, Meet, otro navegador) · reintentando cada 3 s";
           scheduleVisionRetry();
@@ -2082,8 +2090,8 @@ async function syncCursorVision(enable, opts = {}) {
           setBadge(els.visionBadge, "Vision: permiso denegado", "bad");
           if (els.visionStatus) els.visionStatus.textContent = "Permite la camara en el candado de la barra de direcciones y vuelve a entrar a CUR";
         } else {
-          setBadge(els.visionBadge, "Vision: error camara", "bad");
-          if (els.visionStatus) els.visionStatus.textContent = err?.message || "No se pudo abrir la camara";
+          setBadge(els.visionBadge, "Vision: no disponible", "bad");
+          if (els.visionStatus) els.visionStatus.textContent = text || "No se pudo iniciar la vision por computadora";
           scheduleVisionRetry();
         }
       }
