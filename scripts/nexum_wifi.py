@@ -13,9 +13,9 @@ ESP_USB_VIDS = {0x10C4, 0x1A86, 0x0403, 0x303A}
 IS_WINDOWS = sys.platform.startswith("win")
 
 
-def _run(args: list[str], env: dict | None = None) -> str:
+def _run(args: list[str], env: dict | None = None, timeout: float = 6) -> str:
     try:
-        raw = subprocess.run(args, capture_output=True, timeout=6, env=env).stdout
+        raw = subprocess.run(args, capture_output=True, timeout=timeout, env=env).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
     return raw.decode("cp850" if IS_WINDOWS else "utf-8", errors="ignore")
@@ -189,12 +189,167 @@ def saved_password(ssid: str) -> str | None:
     return out or None
 
 
+ESP_USB_HINTS = (
+    (0x10C4, "CP210x (Silicon Labs)"),
+    (0x1A86, "CH340 (WCH)"),
+    (0x0403, "FTDI"),
+    (0x303A, "ESP32-S2/S3 nativo"),
+)
+
+
 def serial_ports() -> list[str]:
     try:
         from serial.tools import list_ports
     except ImportError:
         return []
     return [port.device for port in list_ports.comports() if port.vid in ESP_USB_VIDS]
+
+
+def _com_from_name(name: str) -> str | None:
+    match = re.search(r"\((COM\d+)\)", name or "", re.I)
+    return match.group(1).upper() if match else None
+
+
+_usb_cache: dict = {"at": 0.0, "data": None}
+USB_CACHE_TTL = 2.0
+_VBOXMANAGE = r"C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
+
+
+def _list_esp_serial() -> list[dict]:
+    usable: list[dict] = []
+    try:
+        from serial.tools import list_ports
+    except ImportError:
+        return usable
+    for port in list_ports.comports():
+        if port.vid not in ESP_USB_VIDS:
+            continue
+        chip = next((label for vid, label in ESP_USB_HINTS if vid == port.vid), "USB-UART")
+        usable.append({
+            "port": port.device,
+            "name": port.description or chip,
+            "chip": chip,
+            "ok": True,
+        })
+    return usable
+
+
+def _vbox_captured_esp() -> list[dict]:
+    """ESP/CP210 capturados por VirtualBox (rapido: list usbhost)."""
+    if not IS_WINDOWS or not os.path.isfile(_VBOXMANAGE):
+        return []
+    raw = _run([_VBOXMANAGE, "list", "usbhost"], timeout=4)
+    if not raw:
+        return []
+    found: list[dict] = []
+    blocks = re.split(r"\n\s*\n", raw.strip())
+    for block in blocks:
+        low = block.lower()
+        if "current state:" not in low:
+            continue
+        if "captured" not in low and "held" not in low:
+            continue
+        vid_m = re.search(r"VendorId:\s*0x([0-9a-fA-F]+)", block)
+        pid_m = re.search(r"ProductId:\s*0x([0-9a-fA-F]+)", block)
+        uuid_m = re.search(r"UUID:\s*([0-9a-fA-F-]{36})", block)
+        prod_m = re.search(r"Product:\s*(.+)", block)
+        if not vid_m or not uuid_m:
+            continue
+        vid = int(vid_m.group(1), 16)
+        if vid not in ESP_USB_VIDS:
+            continue
+        chip = next((label for v, label in ESP_USB_HINTS if v == vid), "USB-UART")
+        found.append({
+            "uuid": uuid_m.group(1),
+            "vid": vid,
+            "pid": int(pid_m.group(1), 16) if pid_m else 0,
+            "name": (prod_m.group(1).strip() if prod_m else chip),
+            "chip": chip,
+        })
+    return found
+
+
+def release_vbox_esp_usb() -> list[str]:
+    """Devuelve el ESP al host si VirtualBox lo tiene capturado."""
+    released: list[str] = []
+    captured = _vbox_captured_esp()
+    if not captured:
+        return released
+    # VM en ejecucion tipica del proyecto
+    for vm in ("NEXUM_AI",):
+        for item in captured:
+            _run([_VBOXMANAGE, "controlvm", vm, "usbdetach", item["uuid"]], timeout=8)
+            released.append(item["uuid"])
+            print(f"[USB] liberado de VirtualBox ({vm}): {item.get('chip')} {item['uuid']}", flush=True)
+    if released:
+        time.sleep(1.2)
+    return released
+
+
+def _windows_usb_probe(auto_release: bool = True) -> dict:
+    """Deteccion rapida del COM ESP. Si VBox lo captura, lo libera al host."""
+    usable = _list_esp_serial()
+    if usable:
+        ports = [u["port"] for u in usable]
+        return {"usb": ports, "usb_detalle": usable, "usb_problemas": [], "usb_hint": None}
+
+    captured = _vbox_captured_esp()
+    if captured and auto_release:
+        release_vbox_esp_usb()
+        usable = _list_esp_serial()
+        if usable:
+            ports = [u["port"] for u in usable]
+            return {"usb": ports, "usb_detalle": usable, "usb_problemas": [], "usb_hint": None}
+
+    problems: list[dict] = []
+    hint = None
+    if captured:
+        c = captured[0]
+        problems.append({
+            "port": None,
+            "name": c.get("name") or c.get("chip"),
+            "chip": c.get("chip"),
+            "status": "Captured",
+            "ok": False,
+        })
+        hint = (
+            f"El guante ({c.get('chip')}) esta capturado por VirtualBox. "
+            "Se intento liberarlo al host; si no aparece el COM, en la VM: Dispositivos → USB → desmarca el CP210x."
+        )
+    else:
+        hint = (
+            "No se detecta el COM del ESP32. Conecta el cable USB. "
+            "Si es la primera vez en este PC, instala el driver CP210x (Silicon Labs) o CH340."
+        )
+        problems.append({
+            "port": None,
+            "name": "ESP32",
+            "chip": "CP210x / CH340",
+            "status": "Missing",
+            "ok": False,
+        })
+    return {"usb": [], "usb_detalle": [], "usb_problemas": problems, "usb_hint": hint}
+
+
+def usb_probe(force: bool = False) -> dict:
+    now = time.time()
+    cached = _usb_cache.get("data")
+    if not force and cached is not None and now - float(_usb_cache["at"]) < USB_CACHE_TTL:
+        # Cache hit: si ya habia COM, devolver; si no, reintentar rapido por si acaba de conectarse
+        if cached.get("usb"):
+            return cached
+    if IS_WINDOWS:
+        data = _windows_usb_probe(auto_release=True)
+    else:
+        ports = serial_ports()
+        detalle = [{"port": p, "name": p, "chip": "USB-UART", "ok": True} for p in ports]
+        hint = None if ports else (
+            "No se detecta el COM del ESP32. Conecta el cable USB e instala el driver CP210x o CH340."
+        )
+        data = {"usb": ports, "usb_detalle": detalle, "usb_problemas": [], "usb_hint": hint}
+    _usb_cache["at"] = now
+    _usb_cache["data"] = data
+    return data
 
 
 def status() -> dict:
@@ -209,13 +364,14 @@ def status() -> dict:
         if n["ssid"] != GLOVE_AP_SSID
     ]
     redes.sort(key=lambda n: -n["senal"])
+    usb = usb_probe()
     return {
         "ssid": current["ssid"],
         "banda": current["band"],
         "sugerida": suggest(current, networks),
         "redes": redes,
         "guante_ap": GLOVE_AP_SSID in networks,
-        "usb": serial_ports(),
+        **usb,
     }
 
 
@@ -225,9 +381,17 @@ def configure_over_usb(ssid: str, password: str, notify: Callable[..., None], ti
     except ImportError:
         notify("error", message="Falta pyserial en el entorno: pip install -r requirements.txt")
         return False
+    # Por si VirtualBox se quedo con el cable: liberar y detectar de nuevo.
+    _usb_cache["at"] = 0.0
+    release_vbox_esp_usb()
     ports = serial_ports()
     if not ports:
-        notify("error", message="No se detecta el guante por USB.")
+        probe = usb_probe(force=True)
+        ports = list(probe.get("usb") or [])
+    if not ports:
+        hint = (usb_probe(force=True).get("usb_hint")
+                or "No se detecta el guante por USB. Conecta el cable (COM del CP210x).")
+        notify("error", message=hint)
         return False
     line = f"WIFI:{ssid.encode('utf-8').hex()}:{password.encode('utf-8').hex()}\n".encode("ascii")
     for port in ports:
@@ -278,13 +442,20 @@ def configure_over_usb(ssid: str, password: str, notify: Callable[..., None], ti
                             print(f"[WIFI] guante conectado a {ssid}: {ip}", flush=True)
                             return True
         except (serial.SerialException, OSError) as exc:
+            # Tras WIFI_GUARDADA el ESP32 reinicia: el USB suele caer. El enlace sigue por WiFi/UDP.
+            if saved:
+                print(f"[WIFI] USB corto tras guardar (normal tras reinicio): {exc}", flush=True)
+                notify("joining", ssid=ssid, via="usb")
+                return True
             notify("error", message=f"Se perdio la conexion USB con el guante: {exc}")
             return False
         finally:
             conn.close()
-        notify("error", message=(
-            "El guante guardo la red pero no confirmo la conexion a tiempo." if saved
-            else "El guante no respondio por USB. Verifica el cable."
-        ))
+        if saved:
+            # Guardado OK; WIFI_OK puede llegar por UDP cuando el guante entre a la red.
+            print(f"[WIFI] guardado OK; esperando enlace WiFi/UDP de \"{ssid}\"", flush=True)
+            notify("joining", ssid=ssid, via="usb")
+            return True
+        notify("error", message="El guante no respondio por USB. Verifica el cable.")
         return False
     return False

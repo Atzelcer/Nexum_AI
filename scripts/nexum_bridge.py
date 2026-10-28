@@ -275,6 +275,20 @@ def handle_sys(msg: str, addr=None) -> None:
         lab.note_glove_sys(src_ip, system_msg)
     if system_msg.startswith("WIFI_GUARDADA,"):
         lab.state.publish({"type": "wifi_config", "status": "saved", "ssid": system_msg.split(",", 1)[1]})
+    elif system_msg.startswith("WIFI_OK,"):
+        ip = system_msg.split(",", 1)[1].strip()
+        if ip and ip != "192.168.50.1":
+            lab.state.publish({"type": "wifi_config", "status": "connected", "ssid": "", "ip": ip, "via": "wifi"})
+    elif system_msg.startswith("WIFI_ERROR,"):
+        bad = system_msg.split(",", 1)[1].strip() if "," in system_msg else ""
+        lab.state.publish({
+            "type": "wifi_config",
+            "status": "error",
+            "message": (
+                f'El guante no pudo conectarse a "{bad}". Revisa la contrasena y que la red sea de 2.4 GHz. '
+                "Volvio a su red de configuracion NEXUM-GUANTE."
+            ),
+        })
     elif system_msg.startswith("WIFI_INVALIDA,"):
         lab.state.publish({"type": "wifi_config", "status": "error",
                            "message": f"El guante rechazo los datos ({system_msg.split(',', 1)[1]})."})

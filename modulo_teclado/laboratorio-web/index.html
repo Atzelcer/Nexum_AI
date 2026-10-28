@@ -266,13 +266,14 @@
         </header>
 
         <div class="wifi-notice">
-          <strong>El guante y esta computadora deben estar conectados a la misma red WiFi.</strong>
+          <strong>Si ya estan en la misma red, se verifica solo. Si no, conecta el cable USB para pasarle el WiFi de esta PC.</strong>
           <span>El ESP32 solo funciona con redes de 2.4 GHz.</span>
         </div>
 
         <ul class="wifi-status">
           <li><span>Esta PC esta en</span><b id="wifiPcNet">detectando…</b></li>
           <li><span>Guante</span><b id="wifiGloveNet">buscando…</b></li>
+          <li><span>USB / COM ESP32</span><b id="wifiUsbNet">buscando…</b></li>
         </ul>
 
         <label class="wifi-field">
@@ -293,18 +294,24 @@
           <li data-step="send"><i></i><span>Enviar la red al guante</span></li>
           <li data-step="save"><i></i><span>Guardar en el guante</span></li>
           <li data-step="join"><i></i><span>Conectar a la red WiFi</span></li>
-          <li data-step="link"><i></i><span>Enlazar con esta PC</span></li>
+          <li data-step="link"><i></i><span>Enlazar y recibir datos</span></li>
         </ol>
 
         <p id="wifiMsg" class="wifi-msg" role="status"></p>
 
-        <button type="submit" id="wifiSendBtn" class="primary wifi-send">Configurar guante</button>
+        <div id="wifiActions" class="wifi-actions">
+          <button type="submit" id="wifiSendBtn" class="primary wifi-send">Configurar guante</button>
+          <button type="button" id="wifiRetryBtn" class="ghost wifi-retry" hidden>Reintentar</button>
+        </div>
 
-        <details class="wifi-help">
-          <summary>El guante no aparece</summary>
+        <details class="wifi-help" id="wifiHelp">
+          <summary>El guante no aparece / no hay COM</summary>
           <ol>
-            <li>Lo mas facil: conecta el guante a esta computadora con el cable USB y pulsa <b>Configurar guante</b>.</li>
-            <li>Sin cable: si el guante no encuentra su red, crea su propia red <b>NEXUM-GUANTE</b> (contrasena <b>nexum1234</b>). Conecta esta computadora a ella, pulsa <b>Configurar guante</b> y despues vuelve a tu red.</li>
+            <li>Conecta el guante a esta PC con el <b>cable USB</b>. Arriba debe verse un puerto tipo <b>COM3</b>.</li>
+            <li>Si el driver ya esta instalado pero no hay COM: casi siempre <b>VirtualBox</b> capturo el USB. En la VM: <b>Dispositivos → USB</b> y desmarca el CP210x (NEXUM intenta liberarlo solo).</li>
+            <li>Solo si es la primera vez en este PC, instala el driver <b>CP210x (Silicon Labs)</b> o <b>CH340</b>.</li>
+            <li>Cierra el <b>Monitor Serie</b> de Arduino si esta abierto (bloquea el COM).</li>
+            <li>Sin cable: si el guante emite <b>NEXUM-GUANTE</b> (clave <b>nexum1234</b>), conecta esta PC a esa red, configura y vuelve a tu WiFi.</li>
           </ol>
         </details>
 

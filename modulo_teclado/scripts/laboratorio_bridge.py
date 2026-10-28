@@ -793,15 +793,17 @@ def send_wifi_config(ssid, password):
     if pass_bytes and not 8 <= len(pass_bytes) <= 63:
         wifi_config_error("La contrasena debe tener entre 8 y 63 caracteres (o dejarse vacia si la red es abierta).")
         return
+    # Configurar siempre por USB primero (fiable). UDP solo si no hay cable.
+    if wifi_usb_sender and wifi_usb_sender(ssid, password):
+        return
     target = primary_glove_ip() if state.gloves else None
     if target:
         send_udp(f"CMD:WIFI,{ssid_bytes.hex()},{pass_bytes.hex()}", target)
-        print(f"[WIFI] red enviada al guante: {ssid}", flush=True)
+        print(f"[WIFI] sin USB; red enviada por UDP al guante {target}: {ssid}", flush=True)
         state.publish({"type": "wifi_config", "status": "sent", "ssid": ssid, "via": "wifi"})
         return
-    if wifi_usb_sender and wifi_usb_sender(ssid, password):
-        return
     wifi_config_error(
-        "No se encuentra el guante: no esta enlazado por WiFi ni conectado por USB. "
-        "Conectalo con el cable USB o conecta esta PC a la red NEXUM-GUANTE."
+        "No hay COM del ESP32 usable. Conecta el cable USB, instala el driver CP210x (Silicon Labs) "
+        "o CH340, cierra el Monitor Serie de Arduino y libera el USB si VirtualBox lo capturo. "
+        "Tambien puedes enlazar el guante por WiFi o conectar esta PC a NEXUM-GUANTE."
     )

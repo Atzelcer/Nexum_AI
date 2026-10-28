@@ -3,9 +3,11 @@ const SSID_KEY = "nexum_wifi_ssid_v1";
 const GLOVE_AP_IP = "192.168.50.1";
 const GLOVE_AP_SSID = "NEXUM-GUANTE";
 const POLL_MS = 5000;
-const LINK_WAIT_MS = 35000;
-const SEND_WAIT_MS = 50000;
-const CLOSE_DELAY_MS = 1500;
+const LINK_WAIT_MS = 40000;
+const SEND_WAIT_MS = 20000;
+const CLOSE_DELAY_MS = 1200;
+const LIVE_NEED = 1;
+const LIVE_GRACE_MS = 2500;
 const STEPS = ["send", "save", "join", "link"];
 
 const $ = (id) => document.getElementById(id);
@@ -19,9 +21,12 @@ const els = {
   showPass: $("wifiShowPass"),
   pcNet: $("wifiPcNet"),
   gloveNet: $("wifiGloveNet"),
+  usbNet: $("wifiUsbNet"),
+  help: $("wifiHelp"),
   steps: $("wifiSteps"),
   msg: $("wifiMsg"),
   send: $("wifiSendBtn"),
+  retry: $("wifiRetryBtn"),
   skip: $("wifiSkipNext"),
   open: $("wifiSetupBtn")
 };
@@ -32,7 +37,10 @@ const state = {
   gloveIp: null,
   gloveSsid: "",
   gloveMode: "",
-  net: { ssid: null, banda: null, sugerida: null, redes: [], guante_ap: false, usb: [] },
+  net: {
+    ssid: null, banda: null, sugerida: null, redes: [], guante_ap: false,
+    usb: [], usb_detalle: [], usb_problemas: [], usb_hint: null
+  },
   ssidEdited: false,
   passEdited: false,
   passFor: null,
@@ -43,7 +51,14 @@ const state = {
   touched: false,
   poll: 0,
   timer: 0,
-  closeTimer: 0
+  closeTimer: 0,
+  session: 0,
+  sawSent: false,
+  sawSaved: false,
+  sawJoined: false,
+  joinedIp: null,
+  livePoints: 0,
+  linkReadyAt: 0
 };
 
 function wsUrl() {
@@ -60,12 +75,26 @@ function setHint(node, text, kind = "") {
   node.dataset.kind = kind;
 }
 
+function hideExtraActions() {
+  if (els.retry) els.retry.hidden = true;
+}
+
 function setBusy(busy) {
   state.busy = busy;
   els.send.disabled = busy;
   els.ssid.readOnly = busy;
   els.pass.readOnly = busy;
   els.send.textContent = busy ? "Configurando…" : "Configurar guante";
+  if (busy) hideExtraActions();
+}
+
+function resetSessionFlags() {
+  state.sawSent = false;
+  state.sawSaved = false;
+  state.sawJoined = false;
+  state.joinedIp = null;
+  state.livePoints = 0;
+  state.linkReadyAt = 0;
 }
 
 function resetSteps(visible) {
@@ -133,8 +162,34 @@ function renderHint() {
   return setHint(els.hint, "");
 }
 
+function renderUsbStatus() {
+  if (!els.usbNet) return;
+  const { usb, usb_detalle: detail, usb_problemas: problems, usb_hint: hint } = state.net;
+  if (usb?.length) {
+    const chip = detail?.[0]?.chip ? ` · ${detail[0].chip}` : "";
+    els.usbNet.textContent = `${usb[0]}${chip}`;
+    els.usbNet.dataset.kind = "ok";
+    if (els.help && !hint) els.help.open = false;
+    return;
+  }
+  if (problems?.length) {
+    const p = problems[0];
+    const port = p.port ? `${p.port} · ` : "";
+    const captured = String(p.status || "").toLowerCase() === "captured";
+    els.usbNet.textContent = captured
+      ? `${p.chip || "ESP32"} — capturado por VirtualBox (liberando…)`
+      : `${port}${p.chip || "ESP32"} — sin COM usable`;
+    els.usbNet.dataset.kind = "warn";
+    if (els.help) els.help.open = true;
+    return;
+  }
+  els.usbNet.textContent = "sin COM — conecta el cable USB del guante";
+  els.usbNet.dataset.kind = "bad";
+  if (els.help && !state.gloveIp) els.help.open = true;
+}
+
 function renderStatus() {
-  const { ssid, banda, sugerida, usb, guante_ap: apVisible } = state.net;
+  const { ssid, banda, sugerida, usb, guante_ap: apVisible, usb_hint: hint } = state.net;
   if (!ssid) {
     els.pcNet.textContent = "sin WiFi detectado";
     els.pcNet.dataset.kind = "warn";
@@ -157,6 +212,10 @@ function renderStatus() {
   } else {
     els.gloveNet.textContent = "no detectado";
     els.gloveNet.dataset.kind = "bad";
+  }
+  renderUsbStatus();
+  if (!state.busy && hint && !state.gloveIp && !usb?.length) {
+    setMsg(hint, "warn");
   }
 }
 
@@ -214,23 +273,40 @@ async function refreshNetwork() {
       sugerida: data.sugerida || null,
       redes: Array.isArray(data.redes) ? data.redes : [],
       guante_ap: !!data.guante_ap,
-      usb: Array.isArray(data.usb) ? data.usb : []
+      usb: Array.isArray(data.usb) ? data.usb : [],
+      usb_detalle: Array.isArray(data.usb_detalle) ? data.usb_detalle : [],
+      usb_problemas: Array.isArray(data.usb_problemas) ? data.usb_problemas : [],
+      usb_hint: data.usb_hint || null
     };
   } catch {
-    state.net = { ...state.net, ssid: null, usb: [] };
+    state.net = {
+      ...state.net,
+      ssid: null,
+      usb: [],
+      usb_detalle: [],
+      usb_problemas: [],
+      usb_hint: "No se pudo consultar el USB. Revisa que nexum_http este activo."
+    };
   }
   prefillSsid();
   renderStatus();
   renderHint();
+  if (state.busy) tryFinishLink();
+  else maybeAutoCloseReady();
 }
 
 function finishOk(text) {
   window.clearTimeout(state.timer);
   state.pending = null;
+  state.busy = false;
   stepsDone();
   setMsg(text, "ok");
+  els.send.disabled = true;
   els.send.textContent = "Guante enlazado";
+  els.ssid.readOnly = false;
+  els.pass.readOnly = false;
   els.form.classList.add("is-done");
+  hideExtraActions();
   window.clearTimeout(state.closeTimer);
   state.closeTimer = window.setTimeout(closeModal, CLOSE_DELAY_MS);
 }
@@ -241,12 +317,16 @@ function finishError(text) {
   stepFailed();
   setBusy(false);
   setMsg(text, "bad");
+  if (els.retry) els.retry.hidden = false;
 }
 
 function armTimeout(ms, message) {
   window.clearTimeout(state.timer);
+  const session = state.session;
   state.timer = window.setTimeout(() => {
-    if (state.busy) finishError(typeof message === "function" ? message() : message);
+    if (state.busy && state.session === session) {
+      finishError(typeof message === "function" ? message() : message);
+    }
   }, ms);
 }
 
@@ -260,23 +340,85 @@ function linkTimeoutMessage() {
 }
 
 function gloveLinked() {
-  return state.gloveIp && state.gloveIp !== GLOVE_AP_IP && state.gloveMode !== "AP";
+  return !!(state.gloveIp && state.gloveIp !== GLOVE_AP_IP && state.gloveMode !== "AP");
 }
 
-function onLinked() {
-  if (state.pending && state.busy && gloveLinked()) {
-    finishOk(`Listo: el guante esta en "${state.pending}" y enlazado con esta PC (${state.gloveIp}).`);
+function ssidSame(a, b) {
+  if (!a || !b) return false;
+  return a === b || stem(a) === stem(b);
+}
+
+function targetSsid() {
+  return els.ssid.value.trim() || state.net.sugerida || state.net.ssid || "";
+}
+
+function alreadySameNetwork() {
+  if (!gloveLinked()) return false;
+  const glove = state.gloveSsid;
+  const pc = state.net.ssid;
+  const target = targetSsid();
+  // Misma red: SSID del guante coincide con la PC o con la red elegida (p. ej. 2.4 vs 5).
+  if (glove && (ssidSame(glove, pc) || ssidSame(glove, target))) return true;
+  // Enlazado estable sin SSID aun, pero la PC y el campo apuntan a la misma red.
+  if (!glove && pc && target && ssidSame(pc, target) && state.net.ssid !== GLOVE_AP_SSID) return true;
+  return false;
+}
+
+function maybeAutoCloseReady() {
+  if (state.busy || state.touched) return false;
+  if (!els.modal || els.modal.hidden) return false;
+  if (!alreadySameNetwork()) return false;
+  resetSteps(true);
+  stepsDone();
+  const text = `Ya estan en la misma red. Guante enlazado (${state.gloveIp}).`;
+  if (state.auto) {
+    finishOk(text);
+    return true;
+  }
+  // Apertura manual: avisa pero no fuerza el cierre (por si quieren cambiar la red por USB).
+  setMsg(text + " Si quieres cambiarla, conecta el USB y pulsa Configurar guante.", "ok");
+  els.send.textContent = "Reconfigurar por USB";
+  return true;
+}
+
+function configProgressOk() {
+  // Solo cerrar tras una sesion de config real (enviado + guardado o WiFi OK).
+  return state.busy && state.sawSent && (state.sawSaved || state.sawJoined);
+}
+
+function tryFinishLink() {
+  if (!configProgressOk()) return;
+  if (!gloveLinked()) {
+    state.linkReadyAt = 0;
     return;
   }
-  if (state.auto && !state.touched && !state.busy && gloveLinked()) {
-    setMsg(`El guante ya esta enlazado por WiFi (${state.gloveIp}).`, "ok");
-    els.form.classList.add("is-done");
-    window.clearTimeout(state.closeTimer);
-    state.closeTimer = window.setTimeout(() => {
-      if (!state.touched) closeModal();
-      else els.form.classList.remove("is-done");
-    }, CLOSE_DELAY_MS);
+  if (state.joinedIp && state.gloveIp !== state.joinedIp && state.gloveIp !== GLOVE_AP_IP) {
+    // IP distinta a la reportada por WIFI_OK pero valida: sigue siendo enlace real.
   }
+  if (!state.linkReadyAt) state.linkReadyAt = Date.now();
+
+  const waited = Date.now() - state.linkReadyAt;
+  const pointsOk = state.livePoints >= LIVE_NEED;
+  const graceOk = waited >= LIVE_GRACE_MS;
+
+  if (!pointsOk && !graceOk) {
+    stepTo("link");
+    setMsg(`Enlazado (${state.gloveIp}). Comprobando datos del guante…`, "info");
+    return;
+  }
+
+  const ssid = state.pending || els.ssid.value.trim();
+  const extra = pointsOk ? ` · datos OK` : "";
+  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}${extra}`);
+}
+
+function onLivePoint(msg) {
+  if (!state.busy || !state.sawSent) return;
+  const t = msg?.type;
+  if (t !== "finger" && t !== "preview" && t !== "calibration" && t !== "gloves") return;
+  if (!gloveLinked()) return;
+  state.livePoints += 1;
+  tryFinishLink();
 }
 
 function onBridgeMessage(msg) {
@@ -285,35 +427,72 @@ function onBridgeMessage(msg) {
     if (!state.gloveIp) {
       state.gloveSsid = "";
       state.gloveMode = "";
+      state.linkReadyAt = 0;
     }
     renderStatus();
-    onLinked();
+    if (state.busy) tryFinishLink();
+    else maybeAutoCloseReady();
     return;
   }
+
+  if (msg.type === "finger" || msg.type === "preview" || msg.type === "calibration" || msg.type === "gloves") {
+    if (msg.type === "gloves" && Array.isArray(msg.gloves) && msg.gloves[0]?.ip) {
+      state.gloveIp = msg.gloves[0].ip;
+      renderStatus();
+      if (!state.busy) maybeAutoCloseReady();
+    }
+    onLivePoint(msg);
+    return;
+  }
+
   if (msg.type !== "wifi_config") return;
+
   if (msg.status === "info") {
     state.gloveMode = msg.mode;
     state.gloveSsid = msg.mode === "STA" ? msg.ssid : "";
     renderStatus();
-    onLinked();
+    if (state.busy) tryFinishLink();
+    else maybeAutoCloseReady();
     return;
   }
+
   if (!state.busy) return;
+
   if (msg.status === "sent") {
+    state.sawSent = true;
     stepTo("save");
-    setMsg(msg.via === "usb" ? `Enviando por cable USB (${msg.port})…` : "Enviando por WiFi…", "info");
-    armTimeout(SEND_WAIT_MS, "El guante no confirmo la red. Verifica que este encendido y vuelve a intentar.");
-  } else if (msg.status === "saved") {
-    state.pending = msg.ssid;
+    setMsg(msg.via === "usb"
+      ? `Enviado por USB (${msg.port}). Esperando confirmacion del guante…`
+      : "Enviado por WiFi (sin USB). Esperando confirmacion…", "info");
+    armTimeout(SEND_WAIT_MS, msg.via === "usb"
+      ? "El guante no confirmo el guardado por USB. Revisa el cable y que este encendido."
+      : "El guante no confirmo el guardado. Conectalo por USB y vuelve a intentar.");
+  } else if (msg.status === "saved" || msg.status === "joining") {
+    state.sawSent = true;
+    state.sawSaved = true;
+    state.pending = msg.ssid || state.pending;
     stepTo("join");
-    setMsg(`El guante guardo "${msg.ssid}" y se reinicia para conectarse…`, "info");
-    if (msg.via !== "usb") armTimeout(LINK_WAIT_MS, linkTimeoutMessage);
-  } else if (msg.status === "connected") {
-    state.pending = msg.ssid;
-    stepTo("link");
-    setMsg(`Conectado a "${msg.ssid}" (IP ${msg.ip}). Enlazando con esta PC…`, "info");
+    setMsg(`Guardado "${state.pending}". Conectando a la red…`, "info");
     armTimeout(LINK_WAIT_MS, linkTimeoutMessage);
-    onLinked();
+  } else if (msg.status === "connected") {
+    if (!msg.ip || msg.ip === GLOVE_AP_IP) {
+      setMsg(`IP invalida del guante (${msg.ip || "vacia"}). Esperando red real…`, "warn");
+      return;
+    }
+    state.sawSent = true;
+    state.sawSaved = true;
+    state.sawJoined = true;
+    state.joinedIp = msg.ip;
+    state.pending = msg.ssid || state.pending || els.ssid.value.trim();
+    state.gloveIp = msg.ip;
+    state.gloveMode = "STA";
+    state.gloveSsid = msg.ssid || state.gloveSsid || state.pending;
+    state.linkReadyAt = Date.now();
+    renderStatus();
+    stepTo("link");
+    setMsg(`WiFi OK · ${state.pending} (${msg.ip}). Enlazando…`, "info");
+    armTimeout(LINK_WAIT_MS, linkTimeoutMessage);
+    tryFinishLink();
   } else if (msg.status === "error") {
     finishError(msg.message || "No se pudo configurar el guante.");
   }
@@ -338,7 +517,6 @@ function connectBridge() {
 
 function sendWifi(event) {
   event.preventDefault();
-  state.touched = true;
   if (state.busy) return;
   const error = validate();
   if (error) { setMsg(error, "bad"); return; }
@@ -347,16 +525,47 @@ function sendWifi(event) {
     connectBridge();
     return;
   }
+
   const ssid = els.ssid.value.trim();
+  // Ya en la misma red y enlazado: no hace falta reconfigurar.
+  if (alreadySameNetwork() && ssidSame(state.gloveSsid || ssid, ssid)) {
+    state.touched = false;
+    resetSteps(true);
+    stepsDone();
+    finishOk(`Ya estan en la misma red ("${state.gloveSsid || ssid}"). Guante ${state.gloveIp}.`);
+    return;
+  }
+
+  state.touched = true;
   localStorage.setItem(SSID_KEY, ssid);
   window.clearTimeout(state.closeTimer);
   els.form.classList.remove("is-done");
+  state.session += 1;
+  resetSessionFlags();
+  state.pending = ssid;
   setBusy(true);
   resetSteps(true);
   stepTo("send");
-  setMsg("Buscando el guante…", "info");
-  armTimeout(8000, "No hubo respuesta del puente. Vuelve a intentar.");
+  const hasUsb = Array.isArray(state.net.usb) && state.net.usb.length > 0;
+  setMsg(hasUsb
+    ? `Enviando "${ssid}" por cable USB…`
+    : `Sin USB detectado. Conecta el cable para configurar, o espera enlace por WiFi…`, "info");
+  armTimeout(12000, () => hasUsb
+    ? "El guante no respondio por USB. Revisa el cable y cierra el Monitor Serie de Arduino si esta abierto."
+    : "Conecta el guante por USB para pasarle el WiFi de esta PC, luego pulsa Configurar guante.");
   state.ws.send(JSON.stringify({ action: "wifi_config", ssid, password: els.pass.value }));
+}
+
+function retryFlow() {
+  state.touched = true;
+  window.clearTimeout(state.timer);
+  window.clearTimeout(state.closeTimer);
+  els.form.classList.remove("is-done");
+  resetSessionFlags();
+  setBusy(false);
+  resetSteps(false);
+  hideExtraActions();
+  setMsg("Listo. Pulsa Configurar guante.", "info");
 }
 
 function openModal(auto = false) {
@@ -373,8 +582,10 @@ function openModal(auto = false) {
   els.showPass.textContent = "Ver";
   setHint(els.passHint, "");
   setMsg("");
+  resetSessionFlags();
   setBusy(false);
   resetSteps(false);
+  hideExtraActions();
   els.skip.checked = localStorage.getItem(SKIP_KEY) === "1";
   connectBridge();
   renderStatus();
@@ -392,6 +603,7 @@ function closeModal() {
   window.clearTimeout(state.timer);
   window.clearTimeout(state.closeTimer);
   state.pending = null;
+  resetSessionFlags();
   setBusy(false);
   const ws = state.ws;
   state.ws = null;
@@ -401,6 +613,7 @@ function closeModal() {
 let ssidTimer = 0;
 els.form.addEventListener("submit", sendWifi);
 els.open?.addEventListener("click", () => openModal(false));
+els.retry?.addEventListener("click", retryFlow);
 els.form.addEventListener("pointerdown", () => { state.touched = true; });
 els.ssid.addEventListener("input", () => {
   state.touched = true;
