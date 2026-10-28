@@ -212,19 +212,51 @@
         window.setInterval(probe, 4000);
       }
 
+      async function urlExists(url) {
+        try {
+          const head = await fetch(url, { method: "HEAD", cache: "no-store" });
+          if (head.ok) return true;
+        } catch {}
+        try {
+          const get = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, cache: "no-store" });
+          return get.ok || get.status === 206;
+        } catch {
+          return false;
+        }
+      }
+
       async function boot() {
         const preparedRom = new URL(`./web-roms/${rom}`, location.href);
         const preparedBios = new URL("./web-roms/neogeo.zip", location.href);
+        const coreData = new URL("./ejs/cores/mame2003_plus-wasm.data", location.href);
         let gameUrl = preparedRom.href;
         let biosUrl = preparedBios.href;
-        const localOk = await fetch(preparedRom, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
-        if (!localOk) {
-          const gameSrc = new URL(rom, roms).href;
-          const biosSrc = new URL("neogeo.zip", roms).href;
+
+        const hasCore = await urlExists(coreData);
+        if (!hasCore) {
+          throw new Error(
+            "Falta el nucleo EmulatorJS (ejs/cores). Ejecuta scripts/setup_game_assets.ps1 o copia ejs/cores desde la entrega."
+          );
+        }
+
+        const localOk = await urlExists(preparedRom);
+        const biosOk = await urlExists(preparedBios);
+        if (!localOk || !biosOk) {
+          // Fallback opcional: ROMs crudas de NeoRageX (solo si existen en el PC).
+          const gameSrc = new URL(rom, roms);
+          const biosSrc = new URL("neogeo.zip", roms);
+          const neoOk = await urlExists(gameSrc) && await urlExists(biosSrc);
+          if (!neoOk) {
+            throw new Error(
+              `Faltan ROMs en panel/web-roms (${rom}). ` +
+              "Copia la carpeta web-roms o ejecuta: scripts/setup_game_assets.ps1. " +
+              "Mientras tanto puedes jugar NEXUM Arcade 2D (integrado)."
+            );
+          }
           setStatus("Adaptando ROM NeoRageX…", rom);
-          const gameBlob = await zipToBlob(gameSrc, renameGameEntry);
+          const gameBlob = await zipToBlob(gameSrc.href, renameGameEntry);
           setStatus("Preparando BIOS Neo Geo…", "neogeo.zip");
-          const biosBlob = await zipToBlob(biosSrc, renameBiosEntry, [
+          const biosBlob = await zipToBlob(biosSrc.href, renameBiosEntry, [
             { from: "sm1.sm1", to: "mame.sm1" },
             { from: "000-lo.lo", to: "mamelo.lo", slice: 65536 },
             { from: "sfix.sfx", to: "sfix.sfix" },

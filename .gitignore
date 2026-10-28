@@ -10,8 +10,10 @@ __pycache__/
 .mypy_cache/
 
 modulo_game/gameNeogeo/
+# ROMs Neo Geo (pesadas / derechos): no van a GitHub.
+# Se entregan en NEXUM_ENTREGA o con scripts/setup_game_assets.bat
 modulo_game/panel/web-roms/
-modulo_game/panel/ejs/cores/
+# ejs/cores SI se versiona (nucleo wasm del emulador)
 
 .idea/
 .vscode/

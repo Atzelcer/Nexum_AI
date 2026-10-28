@@ -1,0 +1,19 @@
+Modulo 03 — ROMs y nucleos
+==========================
+
+Para que Metal Slug / KOF / etc. funcionen hacen falta:
+
+  1) modulo_game/panel/web-roms/     (mslug.zip, neogeo.zip, …)
+  2) modulo_game/panel/ejs/cores/    (mame2003_plus-wasm.data, …)
+
+Los cores van en el repositorio. Las ROMs NO se suben a GitHub
+(por tamano y derechos); se entregan en:
+
+  NEXUM_ENTREGA\02_Codigo_fuente\modulo_game\panel\web-roms\
+
+Tras clonar el repo, copia las ROMs o ejecuta desde la raiz:
+
+  scripts\setup_game_assets.bat
+
+Si faltan ROMs, el panel sigue funcionando con **NEXUM Arcade 2D**
+(juego integrado, sin emulador Neo Geo).
