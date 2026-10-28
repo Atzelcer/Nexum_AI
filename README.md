@@ -212,14 +212,26 @@ Reemplazar `COM3` por el puerto del guante (`/dev/ttyUSB0` en Linux).
 
 ### 3.4 Preparar el emulador web (modalidad Videojuego)
 
-Este paso solo es necesario si las carpetas `modulo_game/panel/ejs/cores/` o `modulo_game/panel/web-roms/` no existen.
+Los **núcleos** EmulatorJS (`modulo_game/panel/ejs/cores/`) ya vienen en el repositorio.
+Las **ROMs** (`modulo_game/panel/web-roms/`) no se suben a GitHub; en la entrega están en
+`NEXUM_ENTREGA\02_Codigo_fuente\modulo_game\panel\web-roms\`.
+
+Tras clonar, si faltan ROMs:
+
+```bat
+scripts\setup_game_assets.bat
+```
+
+(o en PowerShell: `powershell -ExecutionPolicy Bypass -File scripts\setup_game_assets.ps1`)
+
+Alternativa desde NeoRageX local:
 
 ```bash
 python modulo_game/scripts/download_ejs.py
 python modulo_game/scripts/prepare_web_roms.py
 ```
 
-El primer comando descarga el emulador y sus núcleos. El segundo convierte las ROM ubicadas en `modulo_game/gameNeogeo/NeoRAGEx 5.2a/ROMs/` al formato que usa el navegador.
+Sin ROMs Neo Geo aún puedes usar **NEXUM Arcade 2D** (integrado en el panel).
 
 ---
 
