@@ -5,9 +5,6 @@ const GLOVE_AP_SSID = "NEXUM-GUANTE";
 const POLL_MS = 5000;
 const LINK_WAIT_MS = 40000;
 const SEND_WAIT_MS = 20000;
-const CLOSE_DELAY_MS = 900;
-const LIVE_NEED = 1;
-const LIVE_GRACE_MS = 2500;
 const STEPS = ["send", "save", "join", "link"];
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +25,7 @@ const els = {
   send: $("wifiSendBtn"),
   verify: $("wifiVerifyBtn"),
   retry: $("wifiRetryBtn"),
+  ready: $("wifiReady"),
   skip: $("wifiSkipNext"),
   open: $("wifiSetupBtn")
 };
@@ -84,15 +82,27 @@ function hideExtraActions() {
     els.verify.hidden = true;
     els.verify.disabled = true;
   }
+  if (els.ready) els.ready.hidden = true;
+}
+
+function setCardPhase(phase = "") {
+  els.form.classList.toggle("is-busy", phase === "busy");
+  els.form.classList.toggle("is-ready", phase === "ready");
 }
 
 function setBusy(busy) {
   state.busy = busy;
   els.send.disabled = busy;
+  els.send.hidden = false;
   els.ssid.readOnly = busy;
   els.pass.readOnly = busy;
   els.send.textContent = busy ? "Configurando…" : "Configurar guante";
-  if (busy) hideExtraActions();
+  if (busy) {
+    hideExtraActions();
+    setCardPhase("busy");
+  } else if (!state.verifiedClose) {
+    setCardPhase("");
+  }
 }
 
 function resetSessionFlags() {
@@ -307,6 +317,9 @@ function showContinue(ready = true) {
   els.verify.hidden = false;
   els.verify.disabled = !ready;
   els.verify.textContent = "Continuar";
+  if (ready) {
+    window.setTimeout(() => els.verify?.focus(), 40);
+  }
 }
 
 function finishOk(text) {
@@ -315,13 +328,16 @@ function finishOk(text) {
   state.busy = false;
   state.verifiedClose = true;
   stepsDone();
+  els.steps.hidden = false;
   setMsg(text, "ok");
   els.send.disabled = false;
-  els.send.textContent = "Reconfigurar";
+  els.send.hidden = false;
+  els.send.textContent = "Cambiar red";
   els.ssid.readOnly = false;
   els.pass.readOnly = false;
-  els.form.classList.add("is-done");
   if (els.retry) els.retry.hidden = true;
+  if (els.ready) els.ready.hidden = false;
+  setCardPhase("ready");
   showContinue(true);
 }
 
@@ -330,6 +346,8 @@ function finishError(text) {
   state.pending = null;
   stepFailed();
   setBusy(false);
+  setCardPhase("");
+  if (els.ready) els.ready.hidden = true;
   setMsg(text, "bad");
   if (els.retry) els.retry.hidden = false;
 }
@@ -382,28 +400,26 @@ function maybeReadyLinked() {
   if (state.busy) return false;
   if (!els.modal || els.modal.hidden) return false;
   if (!gloveLinked()) {
-    if (els.verify) els.verify.hidden = true;
+    if (els.verify) {
+      els.verify.hidden = true;
+      els.verify.disabled = true;
+    }
+    if (els.ready) els.ready.hidden = true;
+    if (!state.busy) setCardPhase("");
     return false;
   }
-
-  resetSteps(true);
-  if (alreadySameNetwork() || state.gloveSsid) stepsDone();
-  else stepTo("link");
 
   const label = state.gloveSsid
     ? `"${state.gloveSsid}" · ${state.gloveIp}`
     : state.gloveIp;
-  setMsg(`Guante enlazado (${label}). Pulsa Continuar para calibrar en el laboratorio.`, "ok");
-  els.send.textContent = "Reconfigurar";
-  els.send.disabled = false;
-  state.verifiedClose = true;
-  showContinue(true);
+  finishOk(`Guante enlazado (${label}).`);
   return true;
 }
 
 function continueToLab() {
-  if (!gloveLinked() && !state.verifiedClose) {
-    setMsg("Aun no hay enlace con el guante. Espera WIFI_OK o conecta por USB.", "warn");
+  // Continuar siempre cierra si ya marcamos listo, o si hay IP de guante.
+  if (!state.verifiedClose && !gloveLinked()) {
+    setMsg("Espera a que el guante quede enlazado, o pulsa Omitir.", "warn");
     return;
   }
   state.verifiedClose = true;
@@ -415,38 +431,17 @@ function configProgressOk() {
   return state.busy && state.sawSent && (state.sawSaved || state.sawJoined);
 }
 
-function armLinkGraceCheck() {
-  window.clearTimeout(state.timer);
-  const session = state.session;
-  const started = state.linkReadyAt || Date.now();
-  state.linkReadyAt = started;
-  const left = Math.max(200, LIVE_GRACE_MS - (Date.now() - started) + 50);
-  state.timer = window.setTimeout(() => {
-    if (state.busy && state.session === session) tryFinishLink();
-  }, left);
-}
-
 function tryFinishLink() {
   if (!configProgressOk()) return;
   if (!gloveLinked()) {
     state.linkReadyAt = 0;
-    return;
-  }
-  if (!state.linkReadyAt) state.linkReadyAt = Date.now();
-
-  const waited = Date.now() - state.linkReadyAt;
-  const pointsOk = state.livePoints >= LIVE_NEED;
-  const graceOk = waited >= LIVE_GRACE_MS;
-
-  if (!pointsOk && !graceOk) {
     stepTo("link");
-    setMsg(`Enlazado (${state.gloveIp}). Casi listo…`, "info");
-    armLinkGraceCheck();
+    setMsg("Esperando que el guante se una a la red…", "info");
     return;
   }
-
+  // En cuanto hay IP real: listo. Continuar → Calibrar.
   const ssid = state.pending || els.ssid.value.trim() || state.gloveSsid || "WiFi";
-  finishOk(`Listo: guante en "${ssid}" · ${state.gloveIp}. Pulsa Continuar para calibrar.`);
+  finishOk(`Listo · "${ssid}" · ${state.gloveIp}`);
 }
 
 function onLivePoint(msg) {
@@ -532,10 +527,7 @@ function onBridgeMessage(msg) {
     state.gloveSsid = msg.ssid || state.gloveSsid || state.pending;
     state.linkReadyAt = Date.now();
     renderStatus();
-    stepTo("link");
-    setMsg(`WiFi OK · ${state.pending} (${msg.ip}). Enlazando…`, "info");
-    armTimeout(LINK_WAIT_MS, linkTimeoutMessage);
-    tryFinishLink();
+    finishOk(`WiFi OK · "${state.pending}" · ${msg.ip}`);
   } else if (msg.status === "error") {
     finishError(msg.message || "No se pudo configurar el guante.");
   }
@@ -579,7 +571,7 @@ function sendWifi(event) {
   state.touched = true;
   localStorage.setItem(SSID_KEY, ssid);
   window.clearTimeout(state.closeTimer);
-  els.form.classList.remove("is-done");
+  state.verifiedClose = false;
   state.session += 1;
   resetSessionFlags();
   state.pending = ssid;
@@ -588,8 +580,8 @@ function sendWifi(event) {
   stepTo("send");
   const hasUsb = Array.isArray(state.net.usb) && state.net.usb.length > 0;
   setMsg(hasUsb
-    ? `Enviando "${ssid}" por cable USB…`
-    : `Sin USB detectado. Conecta el cable para configurar, o espera enlace por WiFi…`, "info");
+    ? `Enviando "${ssid}" por USB…`
+    : "Sin USB. Conecta el cable o espera enlace por WiFi…", "info");
   armTimeout(12000, () => hasUsb
     ? "El guante no respondio por USB. Revisa el cable y cierra el Monitor Serie de Arduino si esta abierto."
     : "Conecta el guante por USB para pasarle el WiFi de esta PC, luego pulsa Configurar guante.");
@@ -600,17 +592,17 @@ function retryFlow() {
   state.touched = true;
   window.clearTimeout(state.timer);
   window.clearTimeout(state.closeTimer);
-  els.form.classList.remove("is-done");
+  state.verifiedClose = false;
   resetSessionFlags();
   setBusy(false);
   resetSteps(false);
   hideExtraActions();
+  setCardPhase("");
   setMsg("Listo. Pulsa Configurar guante.", "info");
 }
 
 function openModal(auto = false) {
   window.clearTimeout(state.closeTimer);
-  els.form.classList.remove("is-done");
   els.modal.hidden = false;
   state.auto = auto;
   state.touched = false;
@@ -623,31 +615,34 @@ function openModal(auto = false) {
   els.pass.type = "password";
   els.showPass.textContent = "Ver";
   setHint(els.passHint, "");
-  setMsg(auto ? "Comprobando si el guante ya esta enlazado…" : "");
+  setMsg(auto ? "Comprobando enlace del guante…" : "");
   resetSessionFlags();
   setBusy(false);
   resetSteps(false);
   hideExtraActions();
+  setCardPhase("");
   els.skip.checked = localStorage.getItem(SKIP_KEY) === "1";
   connectBridge();
   renderStatus();
   refreshNetwork();
   window.clearInterval(state.poll);
   state.poll = window.setInterval(refreshNetwork, POLL_MS);
-  window.setTimeout(() => maybeReadyLinked(), 400);
+  window.setTimeout(() => maybeReadyLinked(), 350);
 }
 
 function closeModal() {
   els.modal.hidden = true;
-  els.form.classList.remove("is-done");
   localStorage.setItem(SKIP_KEY, els.skip.checked ? "1" : "0");
   els.pass.value = "";
   window.clearInterval(state.poll);
   window.clearTimeout(state.timer);
   window.clearTimeout(state.closeTimer);
   state.pending = null;
+  state.verifiedClose = false;
   resetSessionFlags();
   setBusy(false);
+  hideExtraActions();
+  setCardPhase("");
   const ws = state.ws;
   state.ws = null;
   ws?.close();
