@@ -20,6 +20,8 @@ MODE_CHANGE_MIN_ACTIVE = 4
 CHORD_WINDOW_SECONDS = 0.6
 WHEEL_DWELL_SECONDS = 2.0
 WHEEL_ARM_TIMEOUT = 2.5
+WHEEL_ADVANCE_DELAY = 0.22
+WHEEL_ARM_COOLDOWN = 0.45
 MAX_GLOVES = 1
 GLOVE_TIMEOUT_SECONDS = 12.0
 GLOVE_TIMEOUT_CALIBRATING = 90.0
@@ -99,9 +101,12 @@ class LabState:
         self.wheel_hover = "letters"
         self.wheel_armed = False
         self.wheel_opened_at = 0.0
+        self.wheel_armed_at = 0.0
         self.wheel_confirm_at = 0.0
         self.wheel_rises = []
         self.wheel_hover_before = None
+        self.wheel_pending_advance_at = 0.0
+        self.wheel_need_rest = False
         self.chord_rises = {h: [] for h in HANDS}
         self.chord_snapshot = None
 
@@ -173,20 +178,25 @@ class LabState:
     def open_mode_wheel(self, now=None):
         now = now or time.time()
         self.reset_selection()
-        idx = MODES.index(self.mode) if self.mode in MODES else -1
+        # Empieza en el modo actual; 1 dedo pasa al siguiente (no salta al abrir).
         self.wheel_open = True
-        self.wheel_hover = MODES[(idx + 1) % len(MODES)]
+        self.wheel_hover = self.mode if self.mode in MODES else "letters"
         self.wheel_armed = self.all_resting()
         self.wheel_opened_at = now
-        self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
+        self.wheel_armed_at = now if self.wheel_armed else 0.0
+        self.wheel_confirm_at = (now + WHEEL_DWELL_SECONDS) if self.wheel_armed else 0.0
         self.wheel_rises = []
         self.wheel_hover_before = None
+        self.wheel_pending_advance_at = 0.0
+        self.wheel_need_rest = False
         self.publish(self.wheel_payload("open"))
 
     def close_wheel(self, phase=None):
         self.wheel_open = False
         self.wheel_rises = []
         self.wheel_hover_before = None
+        self.wheel_pending_advance_at = 0.0
+        self.wheel_need_rest = False
         for hand in HANDS:
             self.chord_rises[hand] = []
         if phase:
@@ -194,7 +204,10 @@ class LabState:
 
     def wheel_arm(self, now):
         self.wheel_armed = True
+        self.wheel_armed_at = now
         self.wheel_rises = []
+        self.wheel_pending_advance_at = 0.0
+        self.wheel_need_rest = False
         self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
         self.publish(self.wheel_payload("armed"))
 
@@ -220,26 +233,63 @@ class LabState:
             if self.all_resting():
                 self.wheel_arm(now)
             return
+        if self.wheel_need_rest:
+            if self.all_resting():
+                self.wheel_need_rest = False
+                self.wheel_rises = []
+            return
         if not rising:
             return
+        # Ignora rebotes justo al armar (dedos bajando tras abrir con 4).
+        if self.wheel_armed_at and (now - self.wheel_armed_at) < WHEEL_ARM_COOLDOWN:
+            return
+
         self.wheel_rises = [(f, t) for f, t in self.wheel_rises if now - t <= CHORD_WINDOW_SECONDS]
+        if any(f == finger for f, _ in self.wheel_rises):
+            return
+
         if not self.wheel_rises:
+            # Espera un instante: 1 dedo = avanzar; 4 dedos = confirmar sin saltar.
             self.wheel_hover_before = self.wheel_hover
             self.wheel_rises.append((finger, now))
-            self.wheel_advance(now)
+            self.wheel_pending_advance_at = now + WHEEL_ADVANCE_DELAY
+            self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
             return
+
         self.wheel_rises.append((finger, now))
-        if len({f for f, _ in self.wheel_rises}) >= MODE_CHANGE_MIN_ACTIVE:
+        unique = len({f for f, _ in self.wheel_rises})
+        if unique >= MODE_CHANGE_MIN_ACTIVE:
+            self.wheel_pending_advance_at = 0.0
             if self.wheel_hover_before:
                 self.wheel_hover = self.wheel_hover_before
             self.wheel_confirm()
+            return
+        # 2–3 dedos: no avances; puede ser acorde incompleto.
+        self.wheel_pending_advance_at = 0.0
+        self.wheel_confirm_at = now + WHEEL_DWELL_SECONDS
 
     def wheel_tick(self, now):
         if not self.wheel_armed:
             if now - self.wheel_opened_at >= WHEEL_ARM_TIMEOUT:
                 self.wheel_arm(now)
             return
-        if now >= self.wheel_confirm_at:
+        if self.wheel_pending_advance_at and now >= self.wheel_pending_advance_at:
+            unique = len({f for f, _ in self.wheel_rises})
+            self.wheel_pending_advance_at = 0.0
+            if unique >= MODE_CHANGE_MIN_ACTIVE:
+                if self.wheel_hover_before:
+                    self.wheel_hover = self.wheel_hover_before
+                self.wheel_confirm()
+                return
+            if unique == 1:
+                self.wheel_advance(now)
+                self.wheel_rises = []
+                self.wheel_need_rest = True
+            else:
+                # Acorde ambiguo: no saltar de modo.
+                self.wheel_rises = []
+                self.wheel_need_rest = True
+        if self.wheel_open and now >= self.wheel_confirm_at:
             self.wheel_confirm()
 
     def apply_mode(self, mode):
