@@ -3,6 +3,11 @@
 Documentacion para computadoras con **Windows 10/11** (sin VM).
 Formato: **solo DOCX** (Word). Capturas en `capturas/`.
 
+## Repositorio GitHub
+
+- Proyecto: https://github.com/Atzelcer/Nexum_AI
+- Clonar: `git clone https://github.com/Atzelcer/Nexum_AI.git`
+
 ## Contenido
 
 | # | Archivo | Tema |

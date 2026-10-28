@@ -94,6 +94,10 @@ def new_doc():
     return doc
 
 
+REPO_URL = "https://github.com/Atzelcer/Nexum_AI"
+REPO_GIT = "https://github.com/Atzelcer/Nexum_AI.git"
+
+
 def build_install():
     d = new_doc()
     add_title(d, "NEXUM AI — Manual de instalacion (Windows)")
@@ -103,7 +107,24 @@ def build_install():
         "Todo corre de forma nativa en el PC (sin maquina virtual).",
     )
 
-    add_h(d, "1. Que vas a instalar")
+    add_h(d, "1. Repositorio en GitHub")
+    add_table(
+        d,
+        ["Dato", "Valor"],
+        [
+            ["URL del proyecto", REPO_URL],
+            ["Clonar con Git", f"git clone {REPO_GIT}"],
+            ["Rama principal", "main"],
+            ["Autor / cuenta", "Atzelcer"],
+        ],
+    )
+    add_p(
+        d,
+        "Tambien puedes descargar el ZIP desde GitHub (Code → Download ZIP) "
+        "o usar la carpeta 02_Codigo_fuente de la entrega NEXUM_ENTREGA.",
+    )
+
+    add_h(d, "2. Que vas a instalar")
     add_table(
         d,
         ["Componente", "Rol"],
@@ -117,7 +138,7 @@ def build_install():
         ],
     )
 
-    add_h(d, "2. Requisitos")
+    add_h(d, "3. Requisitos")
     add_table(
         d,
         ["Elemento", "Detalle"],
@@ -128,12 +149,23 @@ def build_install():
             ["Red", "WiFi 2.4 GHz (guante y PC en la misma red) + Internet (CDN)"],
             ["Camara", "Integrada o USB 720p para vision"],
             ["USB", "Cable al ESP32 para primera config WiFi"],
+            ["Git (opcional)", "Para clonar desde GitHub"],
         ],
     )
 
-    add_h(d, "3. Preparacion (una sola vez)")
-    add_p(d, "Abrir PowerShell o Git Bash en la carpeta raiz del proyecto NEXUM_AI.")
-    add_h(d, "3.1 Entorno Python", 2)
+    add_h(d, "4. Preparacion (una sola vez)")
+    add_h(d, "4.0 Obtener el codigo", 2)
+    add_table(
+        d,
+        ["Paso", "Comando / accion"],
+        [
+            ["1", f"git clone {REPO_GIT}"],
+            ["2", "cd Nexum_AI"],
+            ["3", "O usar NEXUM_ENTREGA\\02_Codigo_fuente si viene en la entrega"],
+        ],
+    )
+    add_p(d, "Abrir PowerShell o Git Bash en la carpeta raiz del proyecto.")
+    add_h(d, "4.1 Entorno Python", 2)
     add_table(
         d,
         ["Paso", "Comando"],
@@ -144,7 +176,7 @@ def build_install():
             ["4", "pip install -r requirements.txt"],
         ],
     )
-    add_h(d, "3.2 MongoDB", 2)
+    add_h(d, "4.2 MongoDB", 2)
     add_table(
         d,
         ["Paso", "Accion"],
@@ -160,14 +192,14 @@ def build_install():
         "La init crea la base nexum_ai, indices y cuentas de prueba. "
         "Puede ejecutarse varias veces sin duplicar datos.",
     )
-    add_h(d, "3.3 Firmware del guante (solo si es la primera carga)", 2)
+    add_h(d, "4.3 Firmware del guante (solo si es la primera carga)", 2)
     add_p(
         d,
         "Carga el firmware del ESP32 una sola vez con Arduino IDE "
         "(carpeta modulo_teclado/hardware-firdware/ManuelAssistGlove/). "
         "Despues la red WiFi se cambia desde el panel, sin volver a abrir Arduino.",
     )
-    add_h(d, "3.4 Driver USB", 2)
+    add_h(d, "4.4 Driver USB", 2)
     add_p(
         d,
         "Conecta el ESP32. En Administrador de dispositivos debe aparecer un "
@@ -175,7 +207,7 @@ def build_install():
         "del fabricante y vuelve a enchufar.",
     )
 
-    add_h(d, "4. Arranque diario")
+    add_h(d, "5. Arranque diario")
     add_table(
         d,
         ["Orden", "Accion"],
@@ -201,7 +233,7 @@ def build_install():
         ],
     )
 
-    add_h(d, "5. Primera comprobacion")
+    add_h(d, "6. Primera comprobacion")
     add_img(d, "01_portal_login.png", 5.5, "Figura 1. Portal NEXUM AI — iniciar sesion")
     add_table(
         d,
@@ -219,7 +251,7 @@ def build_install():
         "Si Servidor o Puente fallan, revisa las terminales.",
     )
 
-    add_h(d, "6. Puertos usados")
+    add_h(d, "7. Puertos usados")
     add_table(
         d,
         ["Puerto", "Servicio"],
@@ -233,12 +265,14 @@ def build_install():
         ],
     )
 
-    add_h(d, "7. Apagado")
+    add_h(d, "8. Apagado")
     add_p(
         d,
         "Cierra las pestanas del navegador y deten las dos terminales con Ctrl+C. "
         "MongoDB puede quedar como servicio de Windows.",
     )
+    add_h(d, "9. Enlace permanente")
+    add_p(d, f"Codigo fuente y actualizaciones: {REPO_URL}")
     d.save(OUT / "01_Manual_de_Instalacion.docx")
     return "01_Manual_de_Instalacion.docx"
 
@@ -252,6 +286,7 @@ def build_uso():
         "que hace cada modulo, como se entra y todos los movimientos "
         "(guante, camara, mouse y teclado).",
     )
+    add_p(d, f"Codigo fuente: {REPO_URL}")
 
     add_h(d, "1. Iniciar sesion")
     add_img(d, "01_portal_login.png", 5.2, "Figura 1. Ventana Iniciar sesion")
@@ -744,6 +779,7 @@ def build_problemas():
         "Guia de fallos frecuentes en PC Windows: servicios, portal, guante, "
         "camara y vision. Revisa primero la barra de estado del portal.",
     )
+    add_p(d, f"Repositorio y actualizaciones: {REPO_URL}")
     add_img(d, "03_portal_modulos.png", 5.5, "Figura 1. Servidor / Puente / Fuente / Cuenta")
 
     add_h(d, "1. Portal y servicios")
@@ -840,6 +876,8 @@ def build_referencia():
         d,
         ["Elemento", "Valor"],
         [
+            ["GitHub", REPO_URL],
+            ["Clonar", f"git clone {REPO_GIT}"],
             ["Portal", "http://127.0.0.1:8090/"],
             ["Login prueba", "Atzel / 1234"],
             ["HTTP", ".venv\\Scripts\\python.exe -u scripts\\nexum_http.py"],
@@ -930,6 +968,11 @@ def write_readme() -> None:
                 "",
                 "Documentacion para computadoras con **Windows 10/11** (sin VM).",
                 "Formato: **solo DOCX** (Word). Capturas en `capturas/`.",
+                "",
+                "## Repositorio GitHub",
+                "",
+                f"- Proyecto: {REPO_URL}",
+                f"- Clonar: `git clone {REPO_GIT}`",
                 "",
                 "## Contenido",
                 "",

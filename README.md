@@ -1,5 +1,8 @@
 # NEXUM AI — Guía de ejecución del sistema
 
+**Repositorio:** https://github.com/Atzelcer/Nexum_AI  
+**Clonar:** `git clone https://github.com/Atzelcer/Nexum_AI.git`
+
 Esta guía describe, en orden, el procedimiento para poner en marcha NEXUM AI: preparación del entorno, base de datos MongoDB, configuración WiFi del guante desde el panel, arranque de los servicios, emparejamiento y uso de las tres modalidades de interacción.
 
 ---
