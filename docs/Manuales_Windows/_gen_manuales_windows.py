@@ -139,17 +139,115 @@ def build_install():
     )
 
     add_h(d, "3. Requisitos")
+    add_p(
+        d,
+        "NEXUM AI usa vision por camara (MediaPipe), escenas 3D (Three.js), "
+        "emulacion Neo Geo y un puente Python con MongoDB. Abajo se indican "
+        "los requisitos minimos para arrancar y los recomendados para un uso "
+        "fluido (sobre todo Arquitecto 3D y Videojuego).",
+    )
+
+    add_h(d, "3.1 Hardware del PC (minimo y recomendado)", 2)
     add_table(
         d,
-        ["Elemento", "Detalle"],
+        ["Componente", "Minimo", "Recomendado (bueno)"],
         [
-            ["Sistema", "Windows 10 o 11 (64 bits)"],
-            ["RAM", "8 GB minimo · 16 GB recomendado para vision"],
-            ["Disco", "~3 GB libres (venv + modelos)"],
-            ["Red", "WiFi 2.4 GHz (guante y PC en la misma red) + Internet (CDN)"],
-            ["Camara", "Integrada o USB 720p para vision"],
-            ["USB", "Cable al ESP32 para primera config WiFi"],
-            ["Git (opcional)", "Para clonar desde GitHub"],
+            [
+                "Sistema operativo",
+                "Windows 10 (64 bits)",
+                "Windows 11 (64 bits)",
+            ],
+            [
+                "Procesador (CPU)",
+                "Intel Core i5 / AMD Ryzen 5 "
+                "(4 nucleos o mas, ~2.5 GHz o superior)",
+                "Intel Core i7 / AMD Ryzen 7 "
+                "(6–8 nucleos o mas, ~3.5 GHz o superior)",
+            ],
+            [
+                "Memoria RAM",
+                "16 GB",
+                "32 GB — vision, 3D y emulador a la vez",
+            ],
+            [
+                "Tarjeta grafica (GPU)",
+                "Dedicada NVIDIA GTX 1650 / RTX 3050 "
+                "(o equivalente AMD) · 4 GB VRAM · WebGL 2.0",
+                "NVIDIA RTX 3060 / 4060 "
+                "(o equivalente AMD) · 8 GB VRAM o mas",
+            ],
+            [
+                "Almacenamiento",
+                "10 GB libres en SSD "
+                "(venv, MongoDB local, modelos y emulador)",
+                "20 GB libres en SSD NVMe "
+                "(arranque rapido y varios juegos/ROMs)",
+            ],
+            [
+                "Pantalla",
+                "1920 × 1080 (Full HD)",
+                "1920 × 1080 o 2560 × 1440 (QHD)",
+            ],
+        ],
+    )
+    add_p(
+        d,
+        "Nota: con 16 GB de RAM el sistema corre completo (portal, vision, "
+        "Arquitecto 3D y Videojuego). Con 32 GB hay margen para varias "
+        "pestanas, MongoDB y el emulador sin saturar la memoria. "
+        "Una GPU dedicada reduce tirones en Three.js y en el modulo Videojuego.",
+    )
+
+    add_h(d, "3.2 Perifericos, red y extras", 2)
+    add_table(
+        d,
+        ["Elemento", "Minimo", "Recomendado (bueno)"],
+        [
+            [
+                "Camara web",
+                "Integrada o USB 720p",
+                "USB 1080p, buena iluminacion frontal",
+            ],
+            [
+                "Red WiFi",
+                "2.4 GHz (PC y guante en la misma red) "
+                "+ Internet para CDN",
+                "WiFi 2.4 GHz estable, poca latencia; "
+                "evitar solo 5 GHz (el ESP32 no la ve)",
+            ],
+            [
+                "USB",
+                "Cable datos al ESP32 "
+                "(primera config WiFi / firmware)",
+                "Puerto USB estable + driver CP210x o CH340",
+            ],
+            [
+                "Guante NEXUM",
+                "ESP32 + TCA9548A + 5 sensores MPU",
+                "Mismo hardware, bateria cargada y calibrado",
+            ],
+            [
+                "Navegador",
+                "Chrome o Edge actualizado",
+                "Chrome/Edge reciente, una sola pestana de vision",
+            ],
+            [
+                "Git (opcional)",
+                "No obligatorio si usas ZIP o 02_Codigo_fuente",
+                "Git instalado para clonar y actualizar",
+            ],
+        ],
+    )
+
+    add_h(d, "3.3 Software a instalar", 2)
+    add_table(
+        d,
+        ["Software", "Version / detalle"],
+        [
+            ["Python", "3.10 (entorno .venv del proyecto)"],
+            ["MongoDB Community Server", "7.0 o superior (servicio Windows)"],
+            ["Arduino IDE (opcional)", "2.x + nucleo ESP32 — solo primera carga de firmware"],
+            ["Driver USB", "Silicon Labs CP210x o CH340 segun el ESP32"],
         ],
     )
 
